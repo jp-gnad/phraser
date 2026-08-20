@@ -51,7 +51,7 @@ function assertPdfSignature(bytes: Uint8Array): void {
 export function describePdfError(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === "PasswordException") {
-      return "Die PDF ist kennwortgeschützt und kann in Phase 1 noch nicht geöffnet werden.";
+      return "Die PDF ist kennwortgeschützt. Bitte verwenden Sie eine zuvor entsperrte Kopie.";
     }
 
     if (/Invalid PDF|PDF-Signatur/i.test(error.message)) {

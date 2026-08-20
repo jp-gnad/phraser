@@ -124,7 +124,7 @@ Tesseract.js wird mit einem wiederverwendeten Worker ausgeführt. Sprachmodell, 
 
 Die hochgeladene PDF wird ausschließlich als `ArrayBuffer` im aktuellen Browser verarbeitet und nicht persistiert. Es gibt kein Backend, keine Cloud-OCR, keine externe KI-API und keine Analytics. PDF-/OCR-Worker, OCR-Kerne und das deutsche Sprachmodell werden aus dem erzeugten Anwendungsbundle geladen; während der Dokumentverarbeitung sind keine externen Dienste erforderlich.
 
-Spätere lokale Sitzungs- und Template-Speicherung verwendet IndexedDB. PDF-Inhalte, Namen, OCR-Daten und Wettkampfergebnisse dürfen nicht an Telemetrie- oder Analysedienste gelangen.
+Die lokale Sitzungs- und Template-Speicherung verwendet IndexedDB. PDF-Inhalte, Namen, OCR-Daten und Wettkampfergebnisse dürfen nicht an Telemetrie- oder Analysedienste gelangen.
 
 ## Mapping-Editor und Templates
 

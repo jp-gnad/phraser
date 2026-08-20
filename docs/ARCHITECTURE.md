@@ -24,7 +24,7 @@ Vier Regeln bestimmen die Architektur:
 | Validierung | Reine TypeScript-Regeln und Schema-Migrationen | Fachliche Warnungen bleiben von UI und Speicherung unabhängig; keine Validierung löscht Werte. |
 | Tests | Vitest plus realer Browser-OCR-Smoke-Test | Schnelle Tests für Normalisierung, Geometrie, Extraktion und exakte CSV-Bytes; der reale Worker-/WASM-/Sprachdatenpfad wird zusätzlich im Browser geprüft. |
 
-Nicht gewählt werden Cloud-OCR, Backend-Services, serverseitige Datenbanken und externe Analytics. Eine OCR-Bibliothek ist erst dann „integriert“, wenn reale Bilddaten verarbeitet und echte Wort-Geometrien ausgegeben werden; Phase 1 deklariert OCR daher ausdrücklich nicht als fertig.
+Nicht gewählt werden Cloud-OCR, Backend-Services, serverseitige Datenbanken und externe Analytics. Die OCR-Integration gilt nur deshalb als vollständig, weil sie reale Bilddaten verarbeitet und echte Wort-Geometrien ausgibt; ein bloßer Bibliotheks-Platzhalter wäre dafür nicht ausreichend.
 
 ## 3. Modulstruktur
 
@@ -79,7 +79,7 @@ Datei im Speicher
   -> UTF-8-BOM-Download
 ```
 
-Domain-Commands enthalten `apply`/`revert`-Daten und erzeugen einen neuen serialisierbaren Zustand. Nach jeder relevanten Änderung werden abhängige Extraktionen als `stale` markiert. Ein Export ist nur aus der aktuell validierten Revision möglich. Automatisches Speichern schreibt gedrosselt in IndexedDB; die PDF bleibt in Phase 1 nur im Arbeitsspeicher.
+Domain-Commands enthalten `apply`/`revert`-Daten und erzeugen einen neuen serialisierbaren Zustand. Nach jeder relevanten Änderung werden abhängige Extraktionen als `stale` markiert. Ein Export ist nur aus der aktuell validierten Revision möglich. Automatisches Speichern schreibt gedrosselt in IndexedDB; die PDF selbst bleibt aus Datenschutz- und Speichergründen nur im Arbeitsspeicher.
 
 ## 6. Komponentenstruktur
 
