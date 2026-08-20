@@ -12,9 +12,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tesseract.js-data/deu": "^1.0.0",
+    "idb": "^8.0.3",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "tesseract.js": "^7.0.0",
+    "tesseract.js-core": "^7.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
@@ -22,9 +26,13 @@
     "@vitejs/plugin-react": "^6.0.5",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
+    "vite-plugin-static-copy": "^4.1.1",
     "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22.12.0"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": ["tesseract.js"]
   }
 }
