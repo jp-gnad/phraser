@@ -1207,6 +1207,58 @@ input:focus-visible,
   accent-color: var(--forest);
 }
 
+.ocr-preview-card {
+  margin-top: 14px;
+  padding: 11px;
+  color: #385147;
+  background: #f2f7f4;
+  border: 1px solid #cdded6;
+  border-radius: 7px;
+}
+
+.ocr-preview-card > strong {
+  display: block;
+  font-size: 9px;
+}
+
+.ocr-preview-card > p {
+  margin: 5px 0 0;
+  color: #65766f;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.ocr-preview-card .secondary-button {
+  min-height: 32px;
+  padding: 7px 8px;
+  font-size: 8px;
+}
+
+.ocr-preview-card > small {
+  display: block;
+  margin-top: 8px;
+  color: #718079;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.ocr-preview-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 8px;
+  align-items: center;
+  margin-top: 9px;
+  color: #53665e;
+  font-size: 7px;
+}
+
+.ocr-preview-progress progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 5px;
+  accent-color: var(--forest);
+}
+
 .ocr-progress {
   margin: 14px 0;
   padding: 10px;

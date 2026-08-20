@@ -125,8 +125,8 @@ function createGuide(phase: AppPhase, metrics: WorkflowGuideMetrics): GuideConte
             done: metrics.textQuality !== undefined && metrics.textQuality !== "unknown",
           },
           {
-            title: "Gemeinsame Einstellungen festlegen",
-            description: "Kontrast, Binarisierung und Confidence-Grenzen gelten für die gesamte Auswahl. Die in „Datei“ gesetzte Drehung wird trotzdem pro Seite individuell angewendet.",
+            title: "Einstellungen mit einer Vorschau prüfen",
+            description: "Kontrast und Binarisierung einstellen, dann „Vorschau für Seite … erzeugen“ klicken. Oben mit „Original“ und „Optimiert“ vergleichen. Die Vorschau verändert die PDF-Datei nicht; die Drehung bleibt pro Seite individuell.",
           },
           {
             title: "Ausgewählte Seiten starten",

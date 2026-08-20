@@ -118,7 +118,7 @@ PDF.js wandelt beim Viewport bereits das PDF-Koordinatensystem in Canvas-Koordin
 7. Ergebnis über Hash aus Dokumentfingerprint, Seitennummer, Drehung, Auflösung, Sprache und Filterrezept cachen.
 8. Abbruchsignal beendet die gesamte Queue; genau eine Seite läuft, weitere Seiten warten mit sichtbarem Status. Ein Fehler markiert nur die betreffende Seite und die Queue fährt mit der nächsten fort.
 
-Die UI kann Original und optimiertes Bild vergleichen. Kein Filter überschreibt das Original. Unterhalb der konfigurierbaren Confidence-Grenzen entstehen `warning`- bzw. `error`-Befunde.
+Die UI kann die Vorverarbeitung der aktuellen Seite per Vorschau-Button ohne OCR-Lauf erzeugen und anschließend Original und optimiertes Bild vergleichen. Ein Einstellungs- oder Seitenwechsel verwirft eine laufende beziehungsweise veraltete Vorschau. Kein Filter überschreibt das Original. Unterhalb der konfigurierbaren Confidence-Grenzen entstehen `warning`- bzw. `error`-Befunde.
 
 ## 9. Mapping-Algorithmus
 

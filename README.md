@@ -32,6 +32,7 @@ Mannschafts-, Staffel- und Relay-Blöcke werden nicht exportiert. Eine Einzel-Ge
 - dynamischer GitHub-Pages-Unterpfad ohne fest codierten Repositorynamen
 - lokale deutsche Tesseract-OCR mit echten Wortboxen und Confidence
 - Graustufen, Kontrast, adaptive/globale Binarisierung, Entrauschen, manuelle Schräglagenkorrektur und Scanrand-Entfernung
+- nicht-destruktive Ein-Seiten-Vorschau der aktuellen OCR-Vorverarbeitung mit direktem Original-/Optimiert-Vergleich
 - frei wählbare Mehrseiten-OCR mit gemeinsamer Vorverarbeitung, seitenweisem Status, Gesamtfortschritt, gemeinsamem Abbruch und lokalem OCR-Cache
 - mehrere Ergebnisblöcke pro Seite mit expliziter Klassifikation `Einzel`, `Mannschaft / Staffel` oder `Ignorieren`
 - Mapping-Modi `Spalten` und `Beispielteilnehmer`, hierarchische Disziplinfelder und beliebig viele Disziplinen
