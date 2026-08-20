@@ -1,12 +1,13 @@
-import {
-  GlobalWorkerOptions,
-  getDocument,
-  type PDFDocumentLoadingTask,
-  type PDFDocumentProxy,
-} from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+let pdfLibraryPromise: Promise<typeof import("pdfjs-dist")> | undefined;
+
+async function loadPdfLibrary() {
+  const pdfLibrary = await (pdfLibraryPromise ??= import("pdfjs-dist"));
+  pdfLibrary.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  return pdfLibrary;
+}
 
 export interface PdfLoadProgress {
   loaded: number;
@@ -23,11 +24,12 @@ export function startPdfLoad(
   file: File,
   onProgress: (progress: PdfLoadProgress) => void,
 ): Promise<PdfLoadHandle> {
-  return file.arrayBuffer().then((buffer) => {
+  return file.arrayBuffer().then(async (buffer) => {
     assertPdfSignature(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 1024)));
 
+    const { getDocument } = await loadPdfLibrary();
     const task = getDocument({ data: new Uint8Array(buffer) });
-    task.onProgress = ({ loaded, total }) => {
+    task.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
       onProgress({
         loaded,
         total: total || undefined,
@@ -63,4 +65,3 @@ export function describePdfError(error: unknown): string {
 
   return "Die PDF konnte nicht geöffnet werden. Bitte prüfen Sie die Datei und versuchen Sie es erneut.";
 }
-

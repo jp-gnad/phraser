@@ -21,21 +21,15 @@ const initialState: PdfDocumentState = { status: "idle" };
 export function usePdfDocument() {
   const [state, setState] = useState<PdfDocumentState>(initialState);
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
-  const documentRef = useRef<PDFDocumentProxy | null>(null);
   const requestIdRef = useRef(0);
 
   const releaseCurrentDocument = useCallback(async () => {
     requestIdRef.current += 1;
 
-    if (loadingTaskRef.current && !documentRef.current) {
+    if (loadingTaskRef.current) {
       await loadingTaskRef.current.destroy();
     }
     loadingTaskRef.current = null;
-
-    if (documentRef.current) {
-      await documentRef.current.destroy();
-      documentRef.current = null;
-    }
   }, []);
 
   const openFile = useCallback(
@@ -54,11 +48,10 @@ export function usePdfDocument() {
         const document = await handle.document;
 
         if (requestId !== requestIdRef.current) {
-          await document.destroy();
+          await handle.task.destroy();
           return;
         }
 
-        documentRef.current = document;
         setState({ status: "ready", file, document, progress: { loaded: file.size, total: file.size, percent: 100 } });
       } catch (error) {
         if (requestId === requestIdRef.current) {
@@ -83,4 +76,3 @@ export function usePdfDocument() {
 
   return { ...state, openFile, reset };
 }
-
