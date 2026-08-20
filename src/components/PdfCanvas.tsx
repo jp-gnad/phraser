@@ -1,12 +1,17 @@
 import { useEffect, useRef } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { TextLayerAssessment } from "../models";
-import { assessTextLayer, type TextItemLike } from "../pdf/pageAnalysis";
+import {
+  assessTextLayer,
+  textItemsToTokens,
+  type TextItemLike,
+} from "../pdf/pageAnalysis";
 
 export interface PageRenderInfo {
   width: number;
   height: number;
   assessment: TextLayerAssessment;
+  tokens: import("../models").OCRToken[];
 }
 
 interface PdfCanvasProps {
@@ -67,6 +72,7 @@ export function PdfCanvas({
           width: viewport.width,
           height: viewport.height,
           assessment: assessTextLayer(items),
+          tokens: textItemsToTokens(items, pdfPage.getViewport({ scale: 1, rotation: 0 }), page),
         });
       } catch (error) {
         if (!active || (error instanceof Error && error.name === "RenderingCancelledException")) {
@@ -86,4 +92,3 @@ export function PdfCanvas({
 
   return <canvas className="pdf-canvas" ref={canvasRef} />;
 }
-
