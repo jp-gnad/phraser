@@ -17,12 +17,12 @@ Vier Regeln bestimmen die Architektur:
 | --- | --- | --- |
 | Anwendung | React, TypeScript, Vite | Statische Ausgabe, kleine Integrationsfläche, gute Worker- und Asset-Unterstützung, GitHub-Pages-kompatibel. |
 | PDF | PDF.js (`pdfjs-dist`) | Etablierte lokale Rendering- und Textebenen-API mit Koordinaten und eigenem Worker. |
-| OCR | Tesseract.js mit einem dedizierten Scheduler/Worker | Browserlokal, Bounding Boxes und Confidence; Seiten werden kontrolliert nacheinander verarbeitet. Sprachdaten werden in einer späteren Phase als versionierte statische Assets ausgeliefert, damit keine Dokumentdaten abfließen. |
+| OCR | Tesseract.js mit einem dedizierten Worker | Browserlokal, Bounding Boxes und Confidence; Seiten werden kontrolliert nacheinander verarbeitet. Sprachdaten, Worker und WASM-Kerne werden als versionierte statische Assets ausgeliefert, damit keine Dokumentdaten abfließen. |
 | Vorverarbeitung | Canvas/OffscreenCanvas plus eigener Worker | Deterministische lokale Filter; Originalpixel bleiben unverändert. OpenCV.js wird erst ergänzt, wenn Deskew-/Entrauschqualität den zusätzlichen Download rechtfertigt. |
 | Zustand | React-Reducer für UI, versionierte Domain-Commands für Änderungen | Explizite, testbare Zustandsübergänge und natürliches Undo/Redo ohne versteckte Mutation. |
 | Persistenz | IndexedDB mit kleinen Repository-Adaptern | Asynchron, browserlokal und für strukturierte Sitzungen/OCR-Caches geeignet. PDF-Dateien werden standardmäßig nicht persistiert. |
 | Validierung | Reine TypeScript-Regeln und Schema-Migrationen | Fachliche Warnungen bleiben von UI und Speicherung unabhängig; keine Validierung löscht Werte. |
-| Tests | Vitest; später Browser-Regressionstests | Schnelle Tests für Normalisierung, Geometrie, Extraktion und exakte CSV-Bytes. |
+| Tests | Vitest plus realer Browser-OCR-Smoke-Test | Schnelle Tests für Normalisierung, Geometrie, Extraktion und exakte CSV-Bytes; der reale Worker-/WASM-/Sprachdatenpfad wird zusätzlich im Browser geprüft. |
 
 Nicht gewählt werden Cloud-OCR, Backend-Services, serverseitige Datenbanken und externe Analytics. Eine OCR-Bibliothek ist erst dann „integriert“, wenn reale Bilddaten verarbeitet und echte Wort-Geometrien ausgegeben werden; Phase 1 deklariert OCR daher ausdrücklich nicht als fertig.
 
@@ -57,7 +57,7 @@ Die vollständigen TypeScript-Schnittstellen liegen unter `src/models`. Zentral 
 - `OCRToken`: Text, Confidence und normierte Bounding Box (`0..1`) unabhängig von Zoom und DPR.
 - `ResultBlock`: explizite Blockklassifikation und blockbezogene Metadaten.
 - `MappingTemplate`: versionierte Regeln, Disziplinen, globale Regeln und Layout-Fingerprint.
-- `IndividualCompetitionResult`: genau ein Athlet und später genau eine CSV-Datenzeile.
+- `IndividualCompetitionResult`: genau ein Athlet und genau eine CSV-Datenzeile.
 - `ExtractedValue`: Rohwert, optional normalisierter Wert, Confidence und Quellenreferenzen.
 - `ValidationIssue`: nichtdestruktiver Befund mit Feldpfad und Quellenbezug.
 
@@ -87,7 +87,7 @@ Domain-Commands enthalten `apply`/`revert`-Daten und erzeugen einen neuen serial
 - `PdfUpload`: Dateiauswahl, Drag & Drop, Typ-/Größenprüfung.
 - `PdfViewer`: Canvas, Seitennavigation, Zoom, Rotation und Renderstatus.
 - `PageRail`: Seiten-/Blockstatus ohne vorzeitige Parallelverarbeitung.
-- `Inspector`: zunächst Datei-/Seiteninformationen; später kontextbezogene Mapping-Eigenschaften.
+- `Inspector`: Datei-/Seiteninformationen, OCR-Einstellungen und kontextbezogene Mapping-Eigenschaften.
 - `BlockClassifier`: Einzel/Mannschaft oder Staffel/Ignorieren.
 - `MappingEditor`: Auswahl-Overlay, Spaltenmodus, Beispielteilnehmermodus.
 - `MetadataEditor` und `DisciplineEditor`: Gültigkeitsbereiche und sortierbare Disziplinen.
@@ -193,5 +193,4 @@ Vor dem Download verifiziert ein Invariantentest Spaltenzahl, Leerfeldpositionen
 8. **CSV:** exaktes dynamisches Schema, Reihenfolge, Vorschau, Download.
 9. **Qualität:** historische Regressionstests, Performancebudgets, Browsermatrix, GitHub-Pages-Abnahme.
 
-Nach jeder Phase müssen TypeScript-Prüfung, Unit-Tests und Production-Build grün sein. Phase 1 umfasst bewusst noch keine behauptete OCR-, Mapping-, Template- oder CSV-Funktion.
-
+Nach jeder Phase müssen TypeScript-Prüfung, Unit-Tests und Production-Build grün sein. Die beschriebenen Phasen 1 bis 9 sind im aktuellen V1-Arbeitsbereich umgesetzt; verbleibende Grenzen sind im README ausdrücklich dokumentiert.

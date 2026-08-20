@@ -105,4 +105,24 @@ describe("extractResults", () => {
     });
     expect(results[0]?.ageGroup).toBe("Junioren");
   });
+
+  it("repeats a multi-line example-athlete geometry", () => {
+    const rankRule = { ...rule("rank", { group: "overall", field: "overallRank" }, 0.08, 0.2, "integer"), mode: "example-athlete" as const, relativeTo: "sample-athlete" as const };
+    const nameRule = { ...rule("name", { group: "person", field: "fullName" }, 0.3, 0.23), mode: "example-athlete" as const, relativeTo: "sample-athlete" as const };
+    const results = extractResults({
+      tokens: [
+        token("r1", "1", 0.08, 0.2),
+        token("n1", "Müller, Max", 0.3, 0.23),
+        token("r2", "2", 0.08, 0.5),
+        token("n2", "Schmidt, Erika", 0.3, 0.53),
+      ],
+      block: individualBlock,
+      rules: [rankRule, nameRule],
+      disciplines,
+      mode: "example-athlete",
+      metadata: {},
+    });
+    expect(results.map((result) => result.lastName)).toEqual(["Müller", "Schmidt"]);
+    expect(results.map((result) => result.overallRank)).toEqual(["1", "2"]);
+  });
 });

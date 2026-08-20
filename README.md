@@ -2,13 +2,13 @@
 
 Phraser ist ein lokales Arbeitswerkzeug zur Digitalisierung von Einzel-Wettkampfergebnissen aus modernen Text-PDFs und historischen Scans. Das Ziel ist keine unkontrollierte Vollautomatik: PDF-Text und OCR-Geometrie werden automatisch erfasst, die semantische Tabellenstruktur wird einmal visuell zugeordnet und jede unsichere Ableitung bleibt überprüfbar.
 
-Der aktuelle Stand ist **Phase 1 – Basis**. Bereits funktionsfähig sind der lokale PDF-Upload, Dateiprüfung, PDF.js-Rendering, Mehrseitennavigation, Zoom, Rotation und eine erste transparente Einschätzung der vorhandenen Textebene. OCR, Mapping, Extraktion, Kontrolltabelle, Templates und CSV-Export folgen in den dokumentierten Entwicklungsphasen und werden nicht als bereits fertig dargestellt.
+Der aktuelle Stand ist eine durchgängige **Version 1**: PDF-Upload, Textebenenanalyse, lokale OCR mit Bildvorverarbeitung, visuelles Mapping, geometrische Teilnehmerextraktion, Kontrolltabelle, Quellenprüfung, lokale Templates/Sitzungen und der exakt definierte CSV-Export sind funktionsfähig. Kein Dokumentinhalt wird an einen externen Dienst übertragen.
 
 ## Produktprinzip
 
 ```text
 PDF lokal öffnen
-  → Textlage erkennen oder später OCR ausführen
+  → Textlage erkennen oder lokale OCR ausführen
   → Einzel-Ergebnisbereiche explizit klassifizieren
   → Layout einmal visuell zuordnen
   → weitere Teilnehmer als prüfbare Vorschläge extrahieren
@@ -18,7 +18,7 @@ PDF lokal öffnen
 
 Mannschafts-, Staffel- und Relay-Blöcke werden nicht exportiert. Eine Einzel-Gesamtwertung eines Athleten bleibt dagegen einschließlich Gesamtplatz, Gesamtpunkten und beliebig vieler Einzeldisziplinen erhalten.
 
-## Phase-1-Funktionen
+## Funktionen
 
 - PDF per Dateiauswahl oder Drag & Drop öffnen
 - PDF-Signatur und Dateigröße vor dem Parsen prüfen
@@ -29,6 +29,17 @@ Mannschafts-, Staffel- und Relay-Blöcke werden nicht exportiert. Eine Einzel-Ge
 - vorhandene Textebene pro angezeigter Seite konservativ einschätzen
 - verständliche Fehlerzustände für ungültige und kennwortgeschützte PDFs
 - dynamischer GitHub-Pages-Unterpfad ohne fest codierten Repositorynamen
+- lokale deutsche Tesseract-OCR mit echten Wortboxen und Confidence
+- Graustufen, Kontrast, adaptive/globale Binarisierung, Entrauschen, manuelle Schräglagenkorrektur und Scanrand-Entfernung
+- Original-/OCR-optimierte Ansicht, Fortschritt, Abbruch und lokaler OCR-Cache
+- mehrere Ergebnisblöcke pro Seite mit expliziter Klassifikation `Einzel`, `Mannschaft / Staffel` oder `Ignorieren`
+- Mapping-Modi `Spalten` und `Beispielteilnehmer`, hierarchische Disziplinfelder und beliebig viele Disziplinen
+- dokument-, seiten-, block- und personenbezogene manuelle Werte
+- geometrische Extraktion als unbestätigte Vorschläge; Team-/Staffelblöcke bleiben ausgeschlossen
+- editierbare Kontrolltabelle mit Suche, Filter, Sortierung, Undo/Redo und Bestätigungspflicht
+- PDF-Quellverknüpfung mit Originalausschnitt, Rohwert, Korrektur und Confidence
+- IndexedDB-Sitzungen sowie Template-CRUD, Duplizieren, Umbenennen und JSON-Import/-Export
+- sortierbare Disziplinreihenfolge, CSV-Vorschau und UTF-8-BOM-Download
 
 ## Architektur
 
@@ -103,21 +114,23 @@ npm run build
 - **TypeScript** für ein explizites, erweiterbares Domänenmodell
 - **Vite** für Entwicklung, Worker-/Asset-Bundling und statischen Build
 - **PDF.js (`pdfjs-dist`)** für lokales PDF-Parsen, Rendering und Textebenen-Zugriff
-- **Vitest** für schnelle Unit- und spätere Regressionstests
+- **Tesseract.js** mit lokal gebündeltem deutschem Sprachmodell und WASM-Kern
+- **idb** als kleine, typisierte IndexedDB-Abstraktion
+- **Vitest** für Normalisierungs-, Extraktions- und CSV-Regressionstests
 
-Für spätere Phasen ist Tesseract.js als browserlokale OCR-Engine vorgesehen. Es wird erst als implementiert gelten, wenn reale Seitenbilder mit echten Bounding Boxes und Confidence-Werten verarbeitet werden.
+Tesseract.js wird mit einem wiederverwendeten Worker ausgeführt. Sprachmodell, Worker und passende SIMD-/Fallback-WASM-Kerne liegen im statischen Build; die Anwendung fällt nicht auf CDN-Sprachdaten oder Cloud-OCR zurück.
 
 ## Datenschutz
 
-Die hochgeladene PDF wird in Phase 1 ausschließlich als `ArrayBuffer` im aktuellen Browser verarbeitet und nicht persistiert. Es gibt kein Backend, keine Cloud-OCR, keine externe KI-API und keine Analytics. Auch Schriftarten und PDF-Worker werden aus dem erzeugten Anwendungsbundle geladen; während der Dokumentverarbeitung sind keine externen Dienste erforderlich.
+Die hochgeladene PDF wird ausschließlich als `ArrayBuffer` im aktuellen Browser verarbeitet und nicht persistiert. Es gibt kein Backend, keine Cloud-OCR, keine externe KI-API und keine Analytics. PDF-/OCR-Worker, OCR-Kerne und das deutsche Sprachmodell werden aus dem erzeugten Anwendungsbundle geladen; während der Dokumentverarbeitung sind keine externen Dienste erforderlich.
 
 Spätere lokale Sitzungs- und Template-Speicherung verwendet IndexedDB. PDF-Inhalte, Namen, OCR-Daten und Wettkampfergebnisse dürfen nicht an Telemetrie- oder Analysedienste gelangen.
 
 ## Mapping-Editor und Templates
 
-Der geplante Mapping-Editor unterstützt klassische Spalten und einen markierten Beispielteilnehmer. Alle Regeln speichern normalisierte Seitenkoordinaten und stabile Disziplin-IDs. Ergebnisblöcke werden explizit als `Einzel`, `Mannschaft / Staffel` oder `Ignorieren` bestätigt.
+Der Mapping-Editor unterstützt klassische Spalten und einen markierten Beispielteilnehmer. Alle Regeln speichern normalisierte Seitenkoordinaten und stabile Disziplin-IDs. Ergebnisblöcke werden explizit als `Einzel`, `Mannschaft / Staffel` oder `Ignorieren` bestätigt. Eine Schlüsselwort-Heuristik warnt vor Team-/Staffelbegriffen, entscheidet aber nie selbst.
 
-Templates enthalten Layout-, Feld-, Disziplin- und globale Regeln, aber keine Teilnehmerdaten. Sie werden versioniert in IndexedDB gespeichert und können später als JSON importiert beziehungsweise exportiert werden. Geometrische Ähnlichkeit darf nur einen Template-Vorschlag erzeugen.
+Templates enthalten Layout-, Feld-, Disziplin- und globale Regeln, aber keine Teilnehmerdaten. Sie werden versioniert in IndexedDB gespeichert und können als JSON importiert beziehungsweise exportiert werden. Lokale Sitzungen stellen Mapping, Korrekturen, Blöcke und Ergebnisse nach einem Reload wieder her; die PDF muss erneut ausgewählt werden.
 
 ## Wettkampf-Metadaten
 
@@ -125,7 +138,7 @@ Das Datenmodell unterstützt Dokument-, Seiten-, Block- und Personenebene. Expor
 
 ## CSV-Schema
 
-Der geplante Export ist UTF-8 mit BOM, Semikolon-getrennt und enthält genau eine Person pro Zeile. Er beginnt mit:
+Der Export ist UTF-8 mit BOM, Semikolon-getrennt und enthält genau eine bestätigte Person pro Zeile. Er beginnt mit:
 
 ```text
 Nachname;Vorname;Gender;Altersklasse;Jahrgang;Ortsgruppe;Bezirk;Landesverband;Bundesverband;Gesamtplatzierung;Gesamtpunktzahl;;;
@@ -143,15 +156,14 @@ Am Ende stehen exakt `Datum`, `Wettkampf Name` und `Wettkampfort`. Die zwei leer
 
 Historische Scans können durch Schräglage, Vergilbung, Durchscheinen, geringe Auflösung und ungewöhnliche Schriften uneindeutig bleiben. Vorverarbeitung und OCR liefern deshalb keine automatische Wahrheitsbehauptung. Rohwert, normalisierter beziehungsweise korrigierter Wert, Confidence und PDF-Quelle bleiben getrennt erhalten. Unsichere Zeiten, Namen oder Zuordnungen müssen sichtbar geprüft werden.
 
-## Bekannte Einschränkungen von Phase 1
+## Bekannte Einschränkungen
 
-- noch keine OCR und Bildvorverarbeitung
-- noch keine Bounding-Box-Overlays und Ergebnisblock-Auswahl
-- noch kein Mapping oder automatische Teilnehmererkennung
-- noch keine editierbare Kontrolltabelle und PDF-Quellnavigation
-- noch keine IndexedDB-Sitzungen oder Templates
-- noch keine CSV-Vorschau und kein Export
-- kennwortgeschützte PDFs werden noch nicht entsperrt
+- kennwortgeschützte PDFs werden nicht entsperrt
+- OCR wird bewusst seitenweise gestartet; es gibt in V1 keinen unkontrollierten Parallel-Batch über das gesamte Dokument
+- Schräglagenkorrektur ist konservativ und manuell einstellbar, nicht automatisch erraten
+- sehr ungewöhnliche historische Mehrzeilenlayouts können zusätzliche Beispielregeln oder getrennte Ergebnisblöcke benötigen
+- Browser können lokalen IndexedDB-Speicher unter Speicherdruck räumen; Templates lassen sich deshalb als JSON sichern
+- Team-/Staffelerkennung ist nur eine Warnheuristik; die endgültige Blockklassifikation bleibt beim Benutzer
 - Desktop-Ansicht ist priorisiert; eine mobile Mapping-Oberfläche ist kein V1-Ziel
 
-Die Abgrenzung ist beabsichtigt: Jede Phase bleibt ausführbar, ohne spätere Funktionen mit Dummy-Daten vorzutäuschen.
+Unsichere Werte bleiben Vorschläge, werden farblich markiert und müssen vor dem Export ausdrücklich bestätigt werden.
