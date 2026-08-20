@@ -20,6 +20,8 @@ export interface ProcessingJob {
   completedAt?: string;
 }
 
+export type OcrBatchPageState = "queued" | "running" | "completed" | "failed";
+
 export type WorkspacePhase =
   | "file"
   | "scope"

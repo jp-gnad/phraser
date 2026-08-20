@@ -21,22 +21,24 @@ Mannschafts-, Staffel- und Relay-Blöcke werden nicht exportiert. Eine Einzel-Ge
 ## Funktionen
 
 - PDF per Dateiauswahl oder Drag & Drop öffnen
+- irrelevante Seiten zu Beginn nicht-destruktiv ausschließen und bei Bedarf wieder aufnehmen
 - PDF-Signatur und Dateigröße vor dem Parsen prüfen
 - Datei vollständig im Browser an PDF.js übergeben
 - PDF.js-Worker als lokales Build-Asset ausliefern
 - Seiten einzeln rendern und Renderaufträge bei Seitenwechsel abbrechen
-- Seiten wechseln, zoomen und drehen
+- Seiten wechseln, zoomen und seitenweise für Ansicht und OCR-Ausrichtung drehen
 - vorhandene Textebene pro angezeigter Seite konservativ einschätzen
 - verständliche Fehlerzustände für ungültige und kennwortgeschützte PDFs
 - dynamischer GitHub-Pages-Unterpfad ohne fest codierten Repositorynamen
 - lokale deutsche Tesseract-OCR mit echten Wortboxen und Confidence
 - Graustufen, Kontrast, adaptive/globale Binarisierung, Entrauschen, manuelle Schräglagenkorrektur und Scanrand-Entfernung
-- Original-/OCR-optimierte Ansicht, Fortschritt, Abbruch und lokaler OCR-Cache
+- frei wählbare Mehrseiten-OCR mit gemeinsamer Vorverarbeitung, seitenweisem Status, Gesamtfortschritt, gemeinsamem Abbruch und lokalem OCR-Cache
 - mehrere Ergebnisblöcke pro Seite mit expliziter Klassifikation `Einzel`, `Mannschaft / Staffel` oder `Ignorieren`
 - Mapping-Modi `Spalten` und `Beispielteilnehmer`, hierarchische Disziplinfelder und beliebig viele Disziplinen
 - dokument-, seiten-, block- und personenbezogene manuelle Werte
 - geometrische Extraktion als unbestätigte Vorschläge; Team-/Staffelblöcke bleiben ausgeschlossen
 - editierbare Kontrolltabelle mit Suche, Filter, Sortierung, Undo/Redo und Bestätigungspflicht
+- aufklappbare Schritt-für-Schritt-Anleitung mit kontextabhängiger „Als Nächstes“-Hilfe für Mapping, Teilnehmerprüfung, Warnungen und Export
 - PDF-Quellverknüpfung mit Originalausschnitt, Rohwert, Korrektur und Confidence
 - IndexedDB-Sitzungen sowie Template-CRUD, Duplizieren, Umbenennen und JSON-Import/-Export
 - sortierbare Disziplinreihenfolge, CSV-Vorschau und UTF-8-BOM-Download
@@ -159,7 +161,8 @@ Historische Scans können durch Schräglage, Vergilbung, Durchscheinen, geringe 
 ## Bekannte Einschränkungen
 
 - kennwortgeschützte PDFs werden nicht entsperrt
-- OCR wird bewusst seitenweise gestartet; es gibt in V1 keinen unkontrollierten Parallel-Batch über das gesamte Dokument
+- mehrere ausgewählte Seiten werden bewusst nacheinander statt unkontrolliert parallel verarbeitet; dadurch bleiben Browser und Arbeitsspeicher auch bei größeren PDFs stabil
+- ausgeschlossene Seiten bleiben Bestandteil der Original-PDF, werden aber bei Navigation, OCR, Mapping und Extraktion übersprungen
 - Schräglagenkorrektur ist konservativ und manuell einstellbar, nicht automatisch erraten
 - sehr ungewöhnliche historische Mehrzeilenlayouts können zusätzliche Beispielregeln oder getrennte Ergebnisblöcke benötigen
 - Browser können lokalen IndexedDB-Speicher unter Speicherdruck räumen; Templates lassen sich deshalb als JSON sichern

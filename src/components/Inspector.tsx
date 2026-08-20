@@ -1,6 +1,11 @@
 import type { PageRenderInfo } from "./PdfCanvas";
 import { formatFileSize } from "../utils/fileValidation";
-import type { ConfidenceThresholds, PageRotation, PreprocessingRecipe } from "../models";
+import type {
+  ConfidenceThresholds,
+  OcrBatchPageState,
+  PageRotation,
+  PreprocessingRecipe,
+} from "../models";
 import type { OcrProgress } from "../ocr/ocrEngine";
 
 interface InspectorProps {
@@ -8,12 +13,17 @@ interface InspectorProps {
   page: number;
   pageCount: number;
   activePageCount: number;
+  activePages: number[];
+  selectedOcrPages: number[];
+  ocrPageStates: Record<number, OcrBatchPageState>;
+  pageRotations: Record<number, PageRotation>;
   rotation: PageRotation;
   renderInfo?: PageRenderInfo;
   recipe: PreprocessingRecipe;
   onRecipeChange: (recipe: PreprocessingRecipe) => void;
   onRunOcr: () => void;
   onCancelOcr: () => void;
+  onOcrPageSelectionChange: (pages: number[]) => void;
   ocrProgress?: OcrProgress;
   ocrRunning: boolean;
   showOcr?: boolean;
@@ -28,17 +38,29 @@ const qualityLabels = {
   unknown: "Noch nicht analysiert",
 } as const;
 
+const ocrPageStateLabels: Record<OcrBatchPageState, string> = {
+  queued: "wartet",
+  running: "läuft",
+  completed: "fertig",
+  failed: "Fehler",
+};
+
 export function Inspector({
   file,
   page,
   pageCount,
   activePageCount,
+  activePages,
+  selectedOcrPages,
+  ocrPageStates,
+  pageRotations,
   rotation,
   renderInfo,
   recipe,
   onRecipeChange,
   onRunOcr,
   onCancelOcr,
+  onOcrPageSelectionChange,
   ocrProgress,
   ocrRunning,
   showOcr = true,
@@ -97,14 +119,75 @@ export function Inspector({
       </section>
 
       {showOcr ? <section className="inspector-section ocr-settings">
-        <span className="inspector-kicker">Bildvorverarbeitung</span>
-        <h3>OCR für Seite {page}</h3>
+        <span className="inspector-kicker">OCR-Seitenauswahl</span>
+        <h3>{selectedOcrPages.length} Seite{selectedOcrPages.length === 1 ? "" : "n"} ausgewählt</h3>
+        <p className="inspector-note ocr-selection-note">
+          Wählen Sie alle Scan-Seiten, die mit denselben Einstellungen erkannt werden sollen.
+          Sie werden stabil nacheinander verarbeitet.
+        </p>
+        <div className="ocr-selection-actions">
+          <button
+            disabled={ocrRunning || !activePages.includes(page)}
+            onClick={() => onOcrPageSelectionChange([page])}
+            type="button"
+          >
+            Aktuelle Seite
+          </button>
+          <button
+            disabled={ocrRunning || selectedOcrPages.length === activePages.length}
+            onClick={() => onOcrPageSelectionChange(activePages)}
+            type="button"
+          >
+            Alle aktiven
+          </button>
+          <button
+            disabled={ocrRunning || selectedOcrPages.length === 0}
+            onClick={() => onOcrPageSelectionChange([])}
+            type="button"
+          >
+            Leeren
+          </button>
+        </div>
+        <div className="ocr-page-checklist" aria-label="Seiten für OCR auswählen">
+          {activePages.map((pageNumber) => {
+            const state = ocrPageStates[pageNumber];
+            return (
+              <label
+                className={`ocr-page-choice${selectedOcrPages.includes(pageNumber) ? " is-selected" : ""}${state ? ` is-${state}` : ""}`}
+                key={pageNumber}
+              >
+                <input
+                  checked={selectedOcrPages.includes(pageNumber)}
+                  disabled={ocrRunning}
+                  onChange={(event) => onOcrPageSelectionChange(
+                    event.target.checked
+                      ? [...selectedOcrPages, pageNumber]
+                      : selectedOcrPages.filter((selectedPage) => selectedPage !== pageNumber),
+                  )}
+                  type="checkbox"
+                />
+                <span>
+                  Seite {pageNumber} · {pageRotations[pageNumber] ?? 0}°
+                  {pageNumber === page ? " · aktuell" : ""}
+                </span>
+                {state ? <strong>{ocrPageStateLabels[state]}</strong> : null}
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="ocr-settings-heading">
+          <span className="inspector-kicker">Gemeinsame Einstellungen</span>
+          <h3>Bildvorverarbeitung</h3>
+          <p>Diese Einstellungen gelten für alle ausgewählten Seiten. Die Seitendrehung bleibt individuell.</p>
+        </div>
 
         <label className="range-control">
           <span><span>Kontrast</span><strong>{recipe.contrast.toFixed(2)}</strong></span>
           <input
             max="2"
             min="0.7"
+            disabled={ocrRunning}
             onChange={(event) => onRecipeChange({ ...recipe, contrast: Number(event.target.value) })}
             step="0.05"
             type="range"
@@ -117,6 +200,7 @@ export function Inspector({
           <input
             max="3"
             min="-3"
+            disabled={ocrRunning}
             onChange={(event) =>
               onRecipeChange({ ...recipe, deskewDegrees: Number(event.target.value) })
             }
@@ -129,6 +213,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.grayscale}
+            disabled={ocrRunning}
             onChange={(event) => onRecipeChange({ ...recipe, grayscale: event.target.checked })}
             type="checkbox"
           />
@@ -137,6 +222,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.adaptiveThreshold}
+            disabled={ocrRunning}
             onChange={(event) =>
               onRecipeChange({ ...recipe, adaptiveThreshold: event.target.checked })
             }
@@ -150,6 +236,7 @@ export function Inspector({
             <input
               max="230"
               min="60"
+              disabled={ocrRunning}
               onChange={(event) => onRecipeChange({ ...recipe, threshold: Number(event.target.value) })}
               step="1"
               type="range"
@@ -160,6 +247,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.denoise}
+            disabled={ocrRunning}
             onChange={(event) => onRecipeChange({ ...recipe, denoise: event.target.checked })}
             type="checkbox"
           />
@@ -168,6 +256,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.cropDarkBorders}
+            disabled={ocrRunning}
             onChange={(event) =>
               onRecipeChange({ ...recipe, cropDarkBorders: event.target.checked })
             }
@@ -183,6 +272,7 @@ export function Inspector({
             <input
               max="100"
               min={confidenceThresholds.review + 1}
+              disabled={ocrRunning}
               onChange={(event) => onConfidenceThresholdsChange({ ...confidenceThresholds, safe: Number(event.target.value) })}
               type="range"
               value={confidenceThresholds.safe}
@@ -193,6 +283,7 @@ export function Inspector({
             <input
               max={confidenceThresholds.safe - 1}
               min="1"
+              disabled={ocrRunning}
               onChange={(event) => onConfidenceThresholdsChange({ ...confidenceThresholds, review: Number(event.target.value) })}
               type="range"
               value={confidenceThresholds.review}
@@ -210,11 +301,18 @@ export function Inspector({
         {ocrRunning ? (
           <button className="danger-button" onClick={onCancelOcr} type="button">Abbrechen</button>
         ) : (
-          <button className="primary-button full-width" onClick={onRunOcr} type="button">
-            {renderInfo?.tokens.some((token) => token.source === "ocr") ? "OCR erneut ausführen" : "OCR lokal durchführen"}
+          <button
+            className="primary-button full-width"
+            disabled={selectedOcrPages.length === 0}
+            onClick={onRunOcr}
+            type="button"
+          >
+            {selectedOcrPages.length === 0
+              ? "Mindestens eine Seite auswählen"
+              : `${selectedOcrPages.length} Seite${selectedOcrPages.length === 1 ? "" : "n"} lokal erkennen`}
           </button>
         )}
-        <p className="inspector-note">Die Seitendrehung wird vor der Erkennung angewendet. OCR-Kern, Sprachmodell und Bilddaten bleiben auf diesem Gerät.</p>
+        <p className="inspector-note">Die Seitendrehung wird vor jeder Erkennung angewendet. OCR-Kern, Sprachmodell und Bilddaten bleiben auf diesem Gerät.</p>
       </section> : (
         <section className="inspector-section next-step-card">
           <span className="inspector-kicker">Arbeitsstand</span>

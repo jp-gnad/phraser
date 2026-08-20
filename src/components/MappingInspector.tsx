@@ -58,6 +58,20 @@ export function MappingInspector(props: MappingInspectorProps) {
   const pageBlocks = props.blocks.filter((block) => block.pages.includes(props.page));
   const activeBlock = props.blocks.find((block) => block.id === props.activeBlockId);
   const targetOptions = useMemo(() => createTargetOptions(props.disciplines), [props.disciplines]);
+  const hasConfirmedIndividualBlock = props.blocks.some(
+    (block) => block.classification === "individual" && block.classificationConfirmed,
+  );
+  const hasNameRule = props.rules.some(
+    (rule) => rule.target.group === "person" && ["fullName", "lastName"].includes(rule.target.field),
+  );
+  const mappingReady = hasConfirmedIndividualBlock && hasNameRule;
+  const nextInstruction = props.blocks.length === 0
+    ? "Ergebnisbereich auf der PDF markieren."
+    : !hasConfirmedIndividualBlock
+      ? "Den Ergebnisblock als „Einzel“ klassifizieren."
+      : !hasNameRule
+        ? "Eine Namenszelle anklicken und als vollständigen Namen oder Nachnamen zuordnen."
+        : "Weitere benötigte Felder zuordnen oder unten das Muster anwenden.";
 
   function addDiscipline() {
     if (!disciplineName.trim()) return;
@@ -78,18 +92,25 @@ export function MappingInspector(props: MappingInspectorProps) {
         </div>
       </section>
 
+      <section className="mapping-coach" aria-live="polite">
+        <span className="mapping-coach-label">Als Nächstes</span>
+        <strong>{nextInstruction}</strong>
+        <p>Bearbeiten Sie die nummerierten Bereiche von oben nach unten. Grün markierte Schritte sind bereits ausreichend vorbereitet.</p>
+      </section>
+
       <details className="inspector-details" open>
         <summary>1 · Ergebnisblöcke</summary>
         <div className="details-content">
+          <p className="mapping-help">Ein Block begrenzt den Bereich, in dem Phraser nach Teilnehmerzeilen sucht. Kopf- und Fußtexte möglichst nicht mit markieren.</p>
           <div className="button-grid two-columns">
             <button
               className={props.drawingBlock ? "is-active" : ""}
               onClick={() => props.onDrawingBlockChange(!props.drawingBlock)}
               type="button"
             >
-              {props.drawingBlock ? "Bereich jetzt aufziehen" : "Bereich aufziehen"}
+              {props.drawingBlock ? "Jetzt Tabelle umrahmen" : "Tabelle markieren"}
             </button>
-            <button onClick={props.onAddFullPageBlock} type="button">Ganze Seite</button>
+            <button onClick={props.onAddFullPageBlock} type="button">Ganze Seite verwenden</button>
           </div>
           {pageBlocks.length === 0 ? <p className="empty-note">Noch kein Ergebnisblock auf dieser Seite.</p> : null}
           {pageBlocks.map((block) => (
@@ -146,7 +167,7 @@ export function MappingInspector(props: MappingInspectorProps) {
             onClick={() => props.onAssign(parseTarget(targetValue))}
             type="button"
           >
-            Auswahl zuordnen
+            Markierten Text zuordnen
           </button>
           <div className="rule-list">
             {props.rules.map((rule) => (
@@ -162,6 +183,7 @@ export function MappingInspector(props: MappingInspectorProps) {
       <details className="inspector-details" open>
         <summary>3 · Disziplinen</summary>
         <div className="details-content">
+          <p className="mapping-help">Eine Disziplin zuerst hier anlegen. Danach erscheint sie oben in der Feldtyp-Auswahl und ihre Werte können auf der PDF zugeordnet werden.</p>
           <div className="compact-row">
             <input onChange={(event) => setDisciplineName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && addDiscipline()} placeholder="Disziplinname" value={disciplineName} />
             <button onClick={addDiscipline} type="button">Hinzufügen</button>
@@ -252,13 +274,13 @@ export function MappingInspector(props: MappingInspectorProps) {
       <section className="mapping-action">
         <button
           className="primary-button full-width"
-          disabled={!activeBlock || props.rules.length === 0}
+          disabled={!mappingReady}
           onClick={props.onApplyPattern}
           type="button"
         >
           Muster auf Einzelblöcke anwenden
         </button>
-        <span>{props.tokens.length} Text-/OCR-Elemente auf Seite {props.page}</span>
+        <span>{mappingReady ? "Bereit zur Teilnehmerextraktion" : "Erforderlich: bestätigter Einzelblock + Namenszuordnung"} · {props.tokens.length} Textelemente auf Seite {props.page}</span>
       </section>
     </aside>
   );

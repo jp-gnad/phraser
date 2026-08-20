@@ -79,7 +79,7 @@ Datei im Speicher
   -> UTF-8-BOM-Download
 ```
 
-Domain-Commands enthalten `apply`/`revert`-Daten und erzeugen einen neuen serialisierbaren Zustand. Nach jeder relevanten Änderung werden abhängige Extraktionen als `stale` markiert. Ein Export ist nur aus der aktuell validierten Revision möglich. Automatisches Speichern schreibt gedrosselt in IndexedDB; die PDF selbst bleibt aus Datenschutz- und Speichergründen nur im Arbeitsspeicher.
+Domain-Commands enthalten `apply`/`revert`-Daten und erzeugen einen neuen serialisierbaren Zustand. Nach jeder relevanten Änderung werden abhängige Extraktionen als `stale` markiert. Seitenausschlüsse und die OCR-Ausrichtung in 90°-Schritten werden pro PDF-Seite persistiert; ausgeschlossene Seiten bleiben in der Originaldatei, nehmen aber nicht an OCR, Mapping oder Extraktion teil. Ein Export ist nur aus der aktuell validierten Revision möglich. Automatisches Speichern schreibt gedrosselt in IndexedDB; die PDF selbst bleibt aus Datenschutz- und Speichergründen nur im Arbeitsspeicher.
 
 ## 6. Komponentenstruktur
 
@@ -87,7 +87,7 @@ Domain-Commands enthalten `apply`/`revert`-Daten und erzeugen einen neuen serial
 - `PdfUpload`: Dateiauswahl, Drag & Drop, Typ-/Größenprüfung.
 - `PdfViewer`: Canvas, Seitennavigation, Zoom, Rotation und Renderstatus.
 - `PageRail`: Seiten-/Blockstatus ohne vorzeitige Parallelverarbeitung.
-- `Inspector`: Datei-/Seiteninformationen, OCR-Einstellungen und kontextbezogene Mapping-Eigenschaften.
+- `Inspector`: Datei-/Seiteninformationen, Mehrseiten-Auswahl, gemeinsame OCR-Einstellungen, Queue-Status und kontextbezogene Mapping-Eigenschaften.
 - `BlockClassifier`: Einzel/Mannschaft oder Staffel/Ignorieren.
 - `MappingEditor`: Auswahl-Overlay, Spaltenmodus, Beispielteilnehmermodus.
 - `MetadataEditor` und `DisciplineEditor`: Gültigkeitsbereiche und sortierbare Disziplinen.
@@ -109,13 +109,14 @@ PDF.js wandelt beim Viewport bereits das PDF-Koordinatensystem in Canvas-Koordin
 
 ## 8. OCR- und Vorverarbeitungspipeline
 
-1. Seite mit konfigurierbarer OCR-Auflösung rendern.
-2. Original-`ImageBitmap` unverändert behalten; Filter erzeugen abgeleitete Bitmaps.
-3. Filterrezept: Randabschätzung, Graustufen, lokaler Kontrast, adaptive Binarisierung, optionales Entrauschen und konservativer Deskew-Winkel.
-4. Tesseract-Worker mit lokaler deutscher/englischer Sprachdatei ausführen.
-5. Wörter in `OCRToken` mit normierter Box, Rohtext, Confidence und Pipeline-Rezept umwandeln.
-6. Ergebnis über Hash aus Dokumentfingerprint, Seitennummer, Auflösung, Sprache und Filterrezept cachen.
-7. Abbruchsignal beendet Render-/OCR-Auftrag; eine Seite läuft, weitere Seiten stehen in einer priorisierten Queue.
+1. Benutzer wählt eine oder mehrere aktive Seiten; die Auswahl wird in Dokumentreihenfolge als kontrollierte Queue aufgebaut.
+2. Aktuelle Queue-Seite mit konfigurierbarer OCR-Auflösung und ihrer individuellen 90°-Ausrichtung rendern.
+3. Original-`ImageBitmap` unverändert behalten; Filter erzeugen abgeleitete Bitmaps.
+4. Gemeinsames Filterrezept: Randabschätzung, Graustufen, lokaler Kontrast, adaptive Binarisierung, optionales Entrauschen und konservativer Deskew-Winkel.
+5. Tesseract-Worker mit lokaler deutscher/englischer Sprachdatei ausführen.
+6. Wörter in `OCRToken` mit normierter Box, Rohtext, Confidence und Pipeline-Rezept umwandeln.
+7. Ergebnis über Hash aus Dokumentfingerprint, Seitennummer, Drehung, Auflösung, Sprache und Filterrezept cachen.
+8. Abbruchsignal beendet die gesamte Queue; genau eine Seite läuft, weitere Seiten warten mit sichtbarem Status. Ein Fehler markiert nur die betreffende Seite und die Queue fährt mit der nächsten fort.
 
 Die UI kann Original und optimiertes Bild vergleichen. Kein Filter überschreibt das Original. Unterhalb der konfigurierbaren Confidence-Grenzen entstehen `warning`- bzw. `error`-Befunde.
 

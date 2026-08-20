@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DisciplineDefinition, IndividualCompetitionResult } from "../models";
 
 interface ResultsGridProps {
@@ -25,6 +25,10 @@ export function ResultsGrid({
   const [search, setSearch] = useState("");
   const [onlyWarnings, setOnlyWarnings] = useState(reviewMode);
   const [sortBy, setSortBy] = useState<"name" | "rank" | "confidence">("rank");
+
+  useEffect(() => {
+    setOnlyWarnings(reviewMode);
+  }, [reviewMode]);
 
   const visible = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("de-DE");

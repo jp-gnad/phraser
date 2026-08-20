@@ -9,6 +9,7 @@ import type {
   MappingTarget,
   MappingTemplate,
   NormalizedRect,
+  OcrBatchPageState,
   PageRotation,
   PreprocessingRecipe,
   ResultBlock,
@@ -19,6 +20,7 @@ import type {
 import { extractResults } from "../extraction/extractResults";
 import { useUndoableState } from "../hooks/useUndoableState";
 import { OcrEngine, type OcrProgress } from "../ocr/ocrEngine";
+import { combineOcrBatchProgress, normalizeOcrPageSelection } from "../ocr/ocrBatch";
 import { analyzePdfPage } from "../pdf/analyzePage";
 import { renderPageToCanvas } from "../pdf/renderPage";
 import { preprocessPage } from "../preprocessing/preprocessPage";
@@ -37,6 +39,7 @@ import { ResultsGrid } from "./ResultsGrid";
 import { SourceInspector, type SourceInspection } from "./SourceInspector";
 import { TokenOverlay } from "./TokenOverlay";
 import { ViewerToolbar } from "./ViewerToolbar";
+import { WorkflowGuide, type WorkflowGuideMetrics } from "./WorkflowGuide";
 
 interface PdfWorkspaceProps {
   file: File;
@@ -75,6 +78,8 @@ export function PdfWorkspace({
   const [optimizedPages, setOptimizedPages] = useState<Record<number, HTMLCanvasElement>>({});
   const [ocrProgress, setOcrProgress] = useState<OcrProgress>();
   const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrSelectedPages, setOcrSelectedPages] = useState<number[]>([1]);
+  const [ocrPageStates, setOcrPageStates] = useState<Record<number, OcrBatchPageState>>({});
   const [recipe, setRecipe] = useState<PreprocessingRecipe>({
     grayscale: true,
     contrast: 1.2,
@@ -121,6 +126,9 @@ export function PdfWorkspace({
     setPageInfo({});
     setRenderError(undefined);
     setOptimizedPages({});
+    setOcrProgress(undefined);
+    setOcrSelectedPages([1]);
+    setOcrPageStates({});
     setViewMode("original");
     setSelectedTokenIds([]);
     setActiveBlockId(undefined);
@@ -161,6 +169,25 @@ export function PdfWorkspace({
       setSelectedTokenIds([]);
     }
   }, [activePhase]);
+
+  useEffect(() => {
+    setOcrSelectedPages((current) => {
+      const normalized = normalizeOcrPageSelection(current, includedPages);
+      return arraysEqual(current, normalized) ? current : normalized;
+    });
+    setOcrPageStates((current) => Object.fromEntries(
+      Object.entries(current).filter(([pageNumber]) => includedPages.includes(Number(pageNumber))),
+    ));
+  }, [includedPages]);
+
+  useEffect(() => {
+    if (activePhase !== "ocr") return;
+    setOcrSelectedPages((current) => {
+      if (current.length > 0) return current;
+      const fallback = includedPages.includes(page) ? page : includedPages[0];
+      return fallback ? [fallback] : [];
+    });
+  }, [activePhase, includedPages, page]);
 
   useEffect(() => {
     if (activePhase === "file" || !domain.state.excludedPages.includes(page)) return;
@@ -213,7 +240,7 @@ export function PdfWorkspace({
       return;
     }
 
-    if (ocrRunning && targetPage === page) cancelOcr();
+    if (ocrRunning && ocrSelectedPages.includes(targetPage)) cancelOcr();
     const remainingPages = includedPages.filter((pageNumber) => pageNumber !== targetPage);
     domain.update((current) => {
       const resultBlocks = current.resultBlocks.flatMap((block) => {
@@ -266,6 +293,12 @@ export function PdfWorkspace({
       delete next[page];
       return next;
     });
+    setOcrPageStates((current) => {
+      if (!current[page]) return current;
+      const next = { ...current };
+      delete next[page];
+      return next;
+    });
     setViewMode("original");
     setOcrProgress(undefined);
     setSelectedTokenIds([]);
@@ -273,47 +306,119 @@ export function PdfWorkspace({
   }
 
   async function runOcr() {
-    if (domain.state.excludedPages.includes(page)) {
-      setWorkspaceMessage(`Seite ${page} ist ausgeschlossen. Nehmen Sie sie unter „Datei“ wieder auf.`);
+    if (abortControllerRef.current) return;
+    const targetPages = normalizeOcrPageSelection(ocrSelectedPages, includedPages);
+    if (targetPages.length === 0) {
+      setWorkspaceMessage("Wählen Sie rechts mindestens eine aktive Seite für die OCR aus.");
       return;
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setOcrRunning(true);
     setRenderError(undefined);
+    setOcrPageStates((current) => ({
+      ...current,
+      ...Object.fromEntries(targetPages.map((pageNumber) => [pageNumber, "queued" as const])),
+    }));
+
+    let completedPages = 0;
+    let recognizedWords = 0;
+    const failedPages: number[] = [];
 
     try {
-      setOcrProgress({ progress: 0.03, status: "PDF-Seite wird in OCR-Auflösung gerendert" });
-      const source = await renderPageToCanvas(document, page, 2.5, controller.signal, rotation);
-      const optimized = await preprocessPage(
-        source,
-        recipe,
-        (progress) => setOcrProgress({ progress: progress * 0.18, status: "Bild wird optimiert" }),
-        controller.signal,
-      );
-      setOptimizedPages((current) => ({ ...current, [page]: optimized }));
-      setViewMode("optimized");
+      for (const [pageIndex, targetPage] of targetPages.entries()) {
+        if (controller.signal.aborted) throw new DOMException("OCR abgebrochen", "AbortError");
+        const targetRotation = domain.state.pageRotations[targetPage] ?? 0;
+        const pageLabel = `Seite ${targetPage} · ${pageIndex + 1}/${targetPages.length}`;
+        setOcrPageStates((current) => ({ ...current, [targetPage]: "running" }));
 
-      const result = await ocrEngineRef.current.recognize(
-        optimized,
-        page,
-        sessionId,
-        2.5,
-        rotation,
-        recipe,
-        confidenceThresholds,
-        (progress) => setOcrProgress({ ...progress, progress: 0.18 + progress.progress * 0.82 }),
-        controller.signal,
-      );
-      setPageInfo((current) => {
-        const previous = current[page];
-        if (!previous) return current;
-        return { ...current, [page]: { ...previous, tokens: result.tokens } };
-      });
+        try {
+          const analyzed = pageInfo[targetPage] ?? await analyzePdfPage(document, targetPage);
+          setOcrProgress({
+            progress: combineOcrBatchProgress(pageIndex, targetPages.length, 0.03),
+            status: `${pageLabel} · PDF wird gerendert`,
+          });
+          const source = await renderPageToCanvas(
+            document,
+            targetPage,
+            2.5,
+            controller.signal,
+            targetRotation,
+          );
+          const optimized = await preprocessPage(
+            source,
+            recipe,
+            (progress) => setOcrProgress({
+              progress: combineOcrBatchProgress(pageIndex, targetPages.length, 0.03 + progress * 0.15),
+              status: `${pageLabel} · Bild wird optimiert`,
+            }),
+            controller.signal,
+          );
+          setOptimizedPages((current) => ({ ...current, [targetPage]: optimized }));
+          if (targetPage === page) setViewMode("optimized");
+
+          const result = await ocrEngineRef.current.recognize(
+            optimized,
+            targetPage,
+            sessionId,
+            2.5,
+            targetRotation,
+            recipe,
+            confidenceThresholds,
+            (progress) => setOcrProgress({
+              ...progress,
+              progress: combineOcrBatchProgress(
+                pageIndex,
+                targetPages.length,
+                0.18 + progress.progress * 0.82,
+              ),
+              status: `${pageLabel} · ${progress.status}`,
+            }),
+            controller.signal,
+          );
+          setPageInfo((current) => {
+            const previous = current[targetPage] ?? analyzed;
+            return { ...current, [targetPage]: { ...previous, tokens: result.tokens } };
+          });
+          recognizedWords += result.tokens.length;
+          completedPages += 1;
+          setOcrPageStates((current) => ({ ...current, [targetPage]: "completed" }));
+          setOcrProgress({
+            progress: combineOcrBatchProgress(pageIndex, targetPages.length, 1),
+            status: `${pageLabel} · abgeschlossen`,
+          });
+        } catch (error) {
+          if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+            throw error;
+          }
+          failedPages.push(targetPage);
+          setOcrPageStates((current) => ({ ...current, [targetPage]: "failed" }));
+          await ocrEngineRef.current.terminate();
+        }
+      }
+
       setShowTokens(true);
-      setWorkspaceMessage(`${result.tokens.length} OCR-Wörter auf Seite ${page} erkannt.`);
+      setOcrProgress({
+        progress: 1,
+        status: failedPages.length === 0
+          ? `${completedPages} Seite${completedPages === 1 ? "" : "n"} abgeschlossen`
+          : `${completedPages} abgeschlossen · ${failedPages.length} mit Fehler`,
+      });
+      setWorkspaceMessage(
+        `${completedPages} von ${targetPages.length} Seiten verarbeitet · ${recognizedWords} OCR-Wörter erkannt.`
+        + (failedPages.length > 0 ? ` Fehler auf Seite ${failedPages.join(", ")}.` : ""),
+      );
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
+      if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        setOcrPageStates((current) => Object.fromEntries(
+          Object.entries(current).filter(([, state]) => state !== "queued" && state !== "running"),
+        ));
+        setOcrProgress((current) => ({
+          progress: current?.progress ?? 0,
+          status: "OCR-Warteschlange abgebrochen",
+        }));
+        setWorkspaceMessage(`OCR abgebrochen. ${completedPages} von ${targetPages.length} Seiten waren fertig.`);
+      } else {
         setRenderError(error instanceof Error ? error.message : "OCR ist fehlgeschlagen.");
       }
     } finally {
@@ -324,7 +429,12 @@ export function PdfWorkspace({
 
   function cancelOcr() {
     abortControllerRef.current?.abort();
-    setOcrProgress({ progress: 0, status: "OCR abgebrochen" });
+    setOcrProgress((current) => ({ progress: current?.progress ?? 0, status: "OCR-Warteschlange wird abgebrochen" }));
+  }
+
+  function changeOcrPageSelection(pages: number[]) {
+    setOcrSelectedPages(normalizeOcrPageSelection(pages, includedPages));
+    setOcrProgress(undefined);
   }
 
   function addBlock(bounds: NormalizedRect) {
@@ -556,6 +666,28 @@ export function PdfWorkspace({
 
   const currentInfo = pageInfo[page];
   const optimizedPage = optimizedPages[page];
+  const guideMetrics: WorkflowGuideMetrics = {
+    activePageCount: includedPages.length,
+    totalPageCount: document.numPages,
+    currentPage: page,
+    rotation,
+    selectedOcrPageCount: ocrSelectedPages.length,
+    textQuality: currentInfo?.assessment.quality,
+    hasOcr: currentInfo?.tokens.some((token) => token.source === "ocr") ?? false,
+    blockCount: domain.state.resultBlocks.length,
+    confirmedIndividualBlockCount: domain.state.resultBlocks.filter(
+      (block) => block.classification === "individual" && block.classificationConfirmed,
+    ).length,
+    unclassifiedBlockCount: domain.state.resultBlocks.filter((block) => !block.classificationConfirmed).length,
+    fieldRuleCount: domain.state.fieldRules.length,
+    hasNameRule: domain.state.fieldRules.some(
+      (rule) => rule.target.group === "person" && ["fullName", "lastName"].includes(rule.target.field),
+    ),
+    disciplineCount: domain.state.disciplines.length,
+    resultCount: domain.state.results.length,
+    confirmedResultCount: domain.state.results.filter((result) => result.confirmationState === "confirmed").length,
+    warningResultCount: domain.state.results.filter((result) => result.validationState !== "valid").length,
+  };
   const phaseLabel = {
     file: "Dokument und Seiten",
     ocr: "Texterkennung",
@@ -575,6 +707,8 @@ export function PdfWorkspace({
         </div>
         <button className="secondary-button" onClick={onReplaceFile} type="button">Andere PDF öffnen</button>
       </div>
+
+      <WorkflowGuide metrics={guideMetrics} onPhaseChange={onPhaseChange} phase={activePhase} />
 
       <div className="workspace-grid">
         <PageRail
@@ -673,18 +807,23 @@ export function PdfWorkspace({
           <Inspector
             file={file}
             activePageCount={includedPages.length}
+            activePages={includedPages}
             confidenceThresholds={confidenceThresholds}
             onConfidenceThresholdsChange={setConfidenceThresholds}
             onCancelOcr={cancelOcr}
+            onOcrPageSelectionChange={changeOcrPageSelection}
             onRecipeChange={setRecipe}
             onRunOcr={() => void runOcr()}
+            ocrPageStates={ocrPageStates}
             ocrProgress={ocrProgress}
             ocrRunning={ocrRunning}
             page={page}
             pageCount={document.numPages}
+            pageRotations={domain.state.pageRotations}
             recipe={recipe}
             renderInfo={currentInfo}
             rotation={rotation}
+            selectedOcrPages={ocrSelectedPages}
             showOcr={activePhase === "ocr"}
           />
         )}
@@ -720,6 +859,10 @@ function unionBounds(bounds: NormalizedRect[]): NormalizedRect {
   const right = Math.max(...bounds.map((item) => item.x + item.width));
   const bottom = Math.max(...bounds.map((item) => item.y + item.height));
   return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function arraysEqual(left: number[], right: number[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function targetKey(target: MappingTarget): string {
