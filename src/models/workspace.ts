@@ -1,5 +1,5 @@
 import type { CompetitionMetadata, DisciplineDefinition, IndividualCompetitionResult } from "./competition";
-import type { MappingMode, MappingRule, ResultBlock } from "./mapping";
+import type { GlobalFieldRule, MappingMode, MappingRule, ResultBlock } from "./mapping";
 
 export interface WorkspaceMetadata extends CompetitionMetadata {
   gender?: string;
@@ -17,6 +17,6 @@ export interface WorkspaceDomainState {
   fieldRules: MappingRule[];
   disciplines: DisciplineDefinition[];
   metadata: WorkspaceMetadata;
+  globalRules: GlobalFieldRule[];
   results: IndividualCompetitionResult[];
 }
-

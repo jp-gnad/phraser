@@ -1,5 +1,4 @@
 import type {
-  CompetitionMetadata,
   DisciplineDefinition,
   DisciplineResult,
   ExtractedValue,
@@ -12,6 +11,7 @@ import type {
   OCRToken,
   ResultBlock,
   SourceReference,
+  WorkspaceMetadata,
 } from "../models";
 import {
   normalizeBirthYear,
@@ -27,7 +27,7 @@ export interface ExtractionInput {
   rules: MappingRule[];
   disciplines: DisciplineDefinition[];
   mode: MappingMode;
-  metadata: CompetitionMetadata & Record<string, string | undefined>;
+  metadata: WorkspaceMetadata;
   globalRules?: GlobalFieldRule[];
 }
 
@@ -53,9 +53,37 @@ export function extractResults(input: ExtractionInput): IndividualCompetitionRes
     ? matchColumnRows(tokens, rules)
     : matchRepeatedSamples(tokens, rules);
 
+  const metadata = resolveMetadata(input.metadata, input.globalRules ?? [], page, input.block.id);
   return matches
-    .map((fields, index) => buildResult(fields, input, page, index))
+    .map((fields, index) => buildResult(fields, { ...input, metadata }, page, index))
     .filter((result): result is IndividualCompetitionResult => result !== undefined);
+}
+
+function resolveMetadata(
+  base: WorkspaceMetadata,
+  rules: GlobalFieldRule[],
+  page: number,
+  blockId: string,
+): WorkspaceMetadata {
+  const applicable = rules
+    .filter((rule) =>
+      rule.scope.kind === "document" ||
+      (rule.scope.kind === "pages" && rule.scope.pages.includes(page)) ||
+      (rule.scope.kind === "block" && rule.scope.blockId === blockId),
+    )
+    .sort((left, right) => scopeWeight(left) - scopeWeight(right) || left.updatedAt.localeCompare(right.updatedAt));
+  const resolved = { ...base };
+  for (const rule of applicable) {
+    (resolved as Record<string, string | undefined>)[rule.key] = rule.normalizedValue ?? rule.rawValue;
+  }
+  return resolved;
+}
+
+function scopeWeight(rule: GlobalFieldRule): number {
+  if (rule.scope.kind === "document") return 0;
+  if (rule.scope.kind === "pages") return 1;
+  if (rule.scope.kind === "block") return 2;
+  return 3;
 }
 
 function matchColumnRows(tokens: OCRToken[], rules: MappingRule[]): FieldMatch[][] {

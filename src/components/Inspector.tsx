@@ -14,6 +14,7 @@ interface InspectorProps {
   onCancelOcr: () => void;
   ocrProgress?: OcrProgress;
   ocrRunning: boolean;
+  showOcr?: boolean;
 }
 
 const qualityLabels = {
@@ -34,6 +35,7 @@ export function Inspector({
   onCancelOcr,
   ocrProgress,
   ocrRunning,
+  showOcr = true,
 }: InspectorProps) {
   const quality = renderInfo?.assessment.quality ?? "unknown";
 
@@ -80,7 +82,7 @@ export function Inspector({
         </p>
       </section>
 
-      <section className="inspector-section ocr-settings">
+      {showOcr ? <section className="inspector-section ocr-settings">
         <span className="inspector-kicker">Bildvorverarbeitung</span>
         <h3>OCR für Seite {page}</h3>
 
@@ -154,7 +156,13 @@ export function Inspector({
           </button>
         )}
         <p className="inspector-note">OCR-Kern, Sprachmodell und Bilddaten bleiben auf diesem Gerät.</p>
-      </section>
+      </section> : (
+        <section className="inspector-section next-step-card">
+          <span className="inspector-kicker">Arbeitsstand</span>
+          <h3>Quellenansicht aktiv</h3>
+          <p>Wechseln Sie zu OCR für Scanerkennung oder zu Mapping, um Ergebnisblöcke und Felder zuzuordnen.</p>
+        </section>
+      )}
     </aside>
   );
 }

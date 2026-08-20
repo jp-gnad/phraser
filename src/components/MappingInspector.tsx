@@ -6,6 +6,7 @@ import type {
   MappingRule,
   MappingTarget,
   MappingTemplate,
+  GlobalFieldRule,
   OCRToken,
   ResultBlock,
   WorkspaceMetadata,
@@ -23,6 +24,7 @@ interface MappingInspectorProps {
   rules: MappingRule[];
   disciplines: DisciplineDefinition[];
   metadata: WorkspaceMetadata;
+  globalRules: GlobalFieldRule[];
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -39,6 +41,8 @@ interface MappingInspectorProps {
   onUpdateDiscipline: (id: string, name: string) => void;
   onDeleteDiscipline: (id: string) => void;
   onMetadataChange: (metadata: WorkspaceMetadata) => void;
+  onAddGlobalRule: (rule: GlobalFieldRule) => void;
+  onDeleteGlobalRule: (id: string) => void;
   onApplyPattern: () => void;
   createTemplate: (name: string) => MappingTemplate;
   onLoadTemplate: (template: MappingTemplate) => void;
@@ -47,6 +51,10 @@ interface MappingInspectorProps {
 export function MappingInspector(props: MappingInspectorProps) {
   const [targetValue, setTargetValue] = useState("person.fullName");
   const [disciplineName, setDisciplineName] = useState("");
+  const [scopedKey, setScopedKey] = useState<keyof WorkspaceMetadata>("gender");
+  const [scopedValue, setScopedValue] = useState("");
+  const [scope, setScope] = useState<"document" | "page" | "block">("page");
+  const [scopePages, setScopePages] = useState(String(props.page));
   const pageBlocks = props.blocks.filter((block) => block.pages.includes(props.page));
   const activeBlock = props.blocks.find((block) => block.id === props.activeBlockId);
   const targetOptions = useMemo(() => createTargetOptions(props.disciplines), [props.disciplines]);
@@ -90,8 +98,9 @@ export function MappingInspector(props: MappingInspectorProps) {
               <select
                 aria-label={`Klassifikation ${block.name}`}
                 onChange={(event) => props.onBlockClassificationChange(block.id, event.target.value as BlockClassification)}
-                value={block.classification}
+                value={block.classificationConfirmed ? block.classification : ""}
               >
+                <option disabled value="">Klassifizieren …</option>
                 <option value="individual">Einzel</option>
                 <option value="team-or-relay">Mannschaft / Staffel</option>
                 <option value="ignore">Ignorieren</option>
@@ -99,10 +108,15 @@ export function MappingInspector(props: MappingInspectorProps) {
               <button aria-label={`${block.name} löschen`} onClick={() => props.onDeleteBlock(block.id)} type="button">×</button>
             </div>
           ))}
-          {activeBlock?.classification === "individual" ? (
+          {activeBlock?.classification === "individual" && activeBlock.classificationConfirmed ? (
             <p className="safe-note">Dieser bestätigte Einzelblock darf nach Prüfung exportiert werden.</p>
-          ) : activeBlock ? (
+          ) : activeBlock?.classificationConfirmed ? (
             <p className="warning-note">Dieser Block wird vom Export ausgeschlossen.</p>
+          ) : activeBlock ? (
+            <p className="warning-note">Klassifikation ausdrücklich auswählen; bis dahin bleibt der Block ausgeschlossen.</p>
+          ) : null}
+          {teamKeywordDetected(props.tokens) ? (
+            <p className="warning-note">Hinweis: Auf dieser Seite wurden Begriffe wie Mannschaft, Staffel oder Relay erkannt. Die Klassifikation bleibt Ihre Entscheidung.</p>
           ) : null}
         </div>
       </details>
@@ -175,6 +189,56 @@ export function MappingInspector(props: MappingInspectorProps) {
               />
             </label>
           ))}
+          <div className="scoped-metadata">
+            <strong>Wert mit Gültigkeitsbereich</strong>
+            <select onChange={(event) => setScopedKey(event.target.value as keyof WorkspaceMetadata)} value={scopedKey}>
+              {metadataFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
+            </select>
+            <input onChange={(event) => setScopedValue(event.target.value)} placeholder="Wert" value={scopedValue} />
+            <select onChange={(event) => setScope(event.target.value as typeof scope)} value={scope}>
+              <option value="document">gesamte PDF</option>
+              <option value="page">aktuelle Seite</option>
+              <option value="block">aktiver Ergebnisblock</option>
+            </select>
+            {scope === "page" ? (
+              <input
+                aria-label="Gültige Seiten"
+                onChange={(event) => setScopePages(event.target.value)}
+                placeholder="Seiten, z. B. 1-3,5"
+                value={scopePages}
+              />
+            ) : null}
+            <button
+              disabled={!scopedValue.trim() || (scope === "block" && !activeBlock) || (scope === "page" && parsePageSelection(scopePages).length === 0)}
+              onClick={() => {
+                const now = new Date().toISOString();
+                props.onAddGlobalRule({
+                  id: crypto.randomUUID(),
+                  key: scopedKey,
+                  rawValue: scopedValue.trim(),
+                  normalizedValue: scopedValue.trim(),
+                  scope: scope === "document"
+                    ? { kind: "document" }
+                    : scope === "page"
+                      ? { kind: "pages", pages: parsePageSelection(scopePages) }
+                      : { kind: "block", blockId: activeBlock!.id },
+                  updatedAt: now,
+                });
+                setScopedValue("");
+              }}
+              type="button"
+            >
+              Bereichswert hinzufügen
+            </button>
+            <div className="rule-list scoped-rule-list">
+              {props.globalRules.map((rule) => (
+                <div key={rule.id}>
+                  <span>{metadataFields.find((field) => field.key === rule.key)?.label ?? rule.key}: {rule.rawValue} · {scopeLabel(rule)}</span>
+                  <button onClick={() => props.onDeleteGlobalRule(rule.id)} type="button">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </details>
 
@@ -267,4 +331,29 @@ function targetLabel(target: MappingTarget, disciplines: DisciplineDefinition[])
     return `${discipline?.name ?? "Disziplin"} · ${target.field}`;
   }
   return `${target.group} · ${target.field}`;
+}
+
+function teamKeywordDetected(tokens: OCRToken[]): boolean {
+  const text = tokens.map((token) => token.text).join(" ");
+  return /mannschaft|staffel|relay|medley relay|beach relay/i.test(text);
+}
+
+function scopeLabel(rule: GlobalFieldRule): string {
+  if (rule.scope.kind === "document") return "PDF";
+  if (rule.scope.kind === "pages") return `Seite ${rule.scope.pages.join(", ")}`;
+  if (rule.scope.kind === "block") return "Block";
+  return "Person";
+}
+
+function parsePageSelection(value: string): number[] {
+  const pages = new Set<number>();
+  for (const part of value.split(",")) {
+    const range = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!range) continue;
+    const start = Number(range[1]);
+    const end = Number(range[2] ?? range[1]);
+    if (start < 1 || end < start || end - start > 500) continue;
+    for (let page = start; page <= end; page += 1) pages.add(page);
+  }
+  return [...pages].sort((left, right) => left - right);
 }
