@@ -77,9 +77,15 @@ export function ResultsGrid({
                 <th>AK</th>
                 <th>Jg</th>
                 <th>Ortsgruppe</th>
+                <th>Bezirk</th>
+                <th>Landesverband</th>
+                <th>Bundesverband</th>
                 <th>Gesamtplatz</th>
                 <th>Gesamtpunkte</th>
                 {disciplines.map((discipline, index) => <th key={discipline.id}>D{index + 1} · {discipline.name}</th>)}
+                <th>Datum</th>
+                <th>Wettkampf Name</th>
+                <th>Wettkampfort</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -103,6 +109,9 @@ export function ResultsGrid({
                   <EditableCell field="ageGroup" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
                   <EditableCell field="birthYear" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
                   <EditableCell field="localClub" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
+                  <EditableCell field="district" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
+                  <EditableCell field="regionalAssociation" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
+                  <EditableCell field="nationalAssociation" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
                   <EditableCell field="overallRank" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
                   <EditableCell field="overallPoints" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
                   {disciplines.map((discipline) => {
@@ -123,6 +132,9 @@ export function ResultsGrid({
                       </td>
                     );
                   })}
+                  <EditableCell field="competitionDate" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
+                  <EditableCell field="competitionName" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
+                  <EditableCell field="competitionLocation" result={result} onChange={onFieldChange} onOpenSource={onOpenSource} />
                   <td>
                     <span className={`validation-badge is-${result.validationState}`}>{result.validationState}</span>
                     <small>{Math.round(result.confidence ?? 0)} %</small>
@@ -140,7 +152,21 @@ export function ResultsGrid({
 
 interface EditableCellProps {
   result: IndividualCompetitionResult;
-  field: "lastName" | "firstName" | "gender" | "ageGroup" | "birthYear" | "localClub" | "overallRank" | "overallPoints";
+  field:
+    | "lastName"
+    | "firstName"
+    | "gender"
+    | "ageGroup"
+    | "birthYear"
+    | "localClub"
+    | "district"
+    | "regionalAssociation"
+    | "nationalAssociation"
+    | "overallRank"
+    | "overallPoints"
+    | "competitionDate"
+    | "competitionName"
+    | "competitionLocation";
   onChange: ResultsGridProps["onFieldChange"];
   onOpenSource: ResultsGridProps["onOpenSource"];
 }
@@ -165,4 +191,3 @@ const disciplineFieldLabels = {
   penaltyCode: "Code",
   penalty: "Strafe",
 };
-

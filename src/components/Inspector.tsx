@@ -114,6 +114,14 @@ export function Inspector({
 
         <label className="check-control">
           <input
+            checked={recipe.grayscale}
+            onChange={(event) => onRecipeChange({ ...recipe, grayscale: event.target.checked })}
+            type="checkbox"
+          />
+          Graustufen
+        </label>
+        <label className="check-control">
+          <input
             checked={recipe.adaptiveThreshold}
             onChange={(event) =>
               onRecipeChange({ ...recipe, adaptiveThreshold: event.target.checked })
@@ -122,6 +130,19 @@ export function Inspector({
           />
           Adaptive Binarisierung
         </label>
+        {!recipe.adaptiveThreshold ? (
+          <label className="range-control">
+            <span><span>Schwellwert</span><strong>{recipe.threshold ?? 155}</strong></span>
+            <input
+              max="230"
+              min="60"
+              onChange={(event) => onRecipeChange({ ...recipe, threshold: Number(event.target.value) })}
+              step="1"
+              type="range"
+              value={recipe.threshold ?? 155}
+            />
+          </label>
+        ) : null}
         <label className="check-control">
           <input
             checked={recipe.denoise}
