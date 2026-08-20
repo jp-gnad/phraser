@@ -20,7 +20,11 @@ import type {
 import { extractResults } from "../extraction/extractResults";
 import { useUndoableState } from "../hooks/useUndoableState";
 import { OcrEngine, type OcrProgress } from "../ocr/ocrEngine";
-import { combineOcrBatchProgress, normalizeOcrPageSelection } from "../ocr/ocrBatch";
+import {
+  combineOcrBatchProgress,
+  normalizeOcrPageSelection,
+  OcrBatchRunController,
+} from "../ocr/ocrBatch";
 import { analyzePdfPage } from "../pdf/analyzePage";
 import { renderPageToCanvas } from "../pdf/renderPage";
 import { preprocessPage } from "../preprocessing/preprocessPage";
@@ -98,7 +102,7 @@ export function PdfWorkspace({
   const [sessionReady, setSessionReady] = useState(false);
   const [sourceInspection, setSourceInspection] = useState<SourceInspection>();
   const ocrEngineRef = useRef(new OcrEngine());
-  const abortControllerRef = useRef<AbortController | undefined>(undefined);
+  const ocrRunControllerRef = useRef(new OcrBatchRunController());
   const domain = useUndoableState(initialDomainState);
   const sessionId = useMemo(
     () => document.fingerprints[0] ?? `${file.name}-${file.size}-${file.lastModified}`,
@@ -196,7 +200,7 @@ export function PdfWorkspace({
 
   useEffect(() => {
     return () => {
-      abortControllerRef.current?.abort();
+      ocrRunControllerRef.current.cancel();
       void ocrEngineRef.current.terminate();
     };
   }, []);
@@ -306,14 +310,22 @@ export function PdfWorkspace({
   }
 
   async function runOcr() {
-    if (abortControllerRef.current) return;
     const targetPages = normalizeOcrPageSelection(ocrSelectedPages, includedPages);
     if (targetPages.length === 0) {
       setWorkspaceMessage("Wählen Sie rechts mindestens eine aktive Seite für die OCR aus.");
       return;
     }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const controller = ocrRunControllerRef.current.start();
+    if (!controller) return;
+    const isCurrentRun = () => ocrRunControllerRef.current.isCurrent(controller);
+    const ensureCurrentRun = () => {
+      if (!isCurrentRun() || controller.signal.aborted) {
+        throw new DOMException("OCR abgebrochen", "AbortError");
+      }
+    };
+    const reportProgress = (progress: OcrProgress) => {
+      if (isCurrentRun()) setOcrProgress(progress);
+    };
     setOcrRunning(true);
     setRenderError(undefined);
     setOcrPageStates((current) => ({
@@ -327,14 +339,15 @@ export function PdfWorkspace({
 
     try {
       for (const [pageIndex, targetPage] of targetPages.entries()) {
-        if (controller.signal.aborted) throw new DOMException("OCR abgebrochen", "AbortError");
+        ensureCurrentRun();
         const targetRotation = domain.state.pageRotations[targetPage] ?? 0;
         const pageLabel = `Seite ${targetPage} · ${pageIndex + 1}/${targetPages.length}`;
         setOcrPageStates((current) => ({ ...current, [targetPage]: "running" }));
 
         try {
           const analyzed = pageInfo[targetPage] ?? await analyzePdfPage(document, targetPage);
-          setOcrProgress({
+          ensureCurrentRun();
+          reportProgress({
             progress: combineOcrBatchProgress(pageIndex, targetPages.length, 0.03),
             status: `${pageLabel} · PDF wird gerendert`,
           });
@@ -345,15 +358,17 @@ export function PdfWorkspace({
             controller.signal,
             targetRotation,
           );
+          ensureCurrentRun();
           const optimized = await preprocessPage(
             source,
             recipe,
-            (progress) => setOcrProgress({
+            (progress) => reportProgress({
               progress: combineOcrBatchProgress(pageIndex, targetPages.length, 0.03 + progress * 0.15),
               status: `${pageLabel} · Bild wird optimiert`,
             }),
             controller.signal,
           );
+          ensureCurrentRun();
           setOptimizedPages((current) => ({ ...current, [targetPage]: optimized }));
           if (targetPage === page) setViewMode("optimized");
 
@@ -365,7 +380,7 @@ export function PdfWorkspace({
             targetRotation,
             recipe,
             confidenceThresholds,
-            (progress) => setOcrProgress({
+            (progress) => reportProgress({
               ...progress,
               progress: combineOcrBatchProgress(
                 pageIndex,
@@ -376,6 +391,7 @@ export function PdfWorkspace({
             }),
             controller.signal,
           );
+          ensureCurrentRun();
           setPageInfo((current) => {
             const previous = current[targetPage] ?? analyzed;
             return { ...current, [targetPage]: { ...previous, tokens: result.tokens } };
@@ -383,13 +399,13 @@ export function PdfWorkspace({
           recognizedWords += result.tokens.length;
           completedPages += 1;
           setOcrPageStates((current) => ({ ...current, [targetPage]: "completed" }));
-          setOcrProgress({
+          reportProgress({
             progress: combineOcrBatchProgress(pageIndex, targetPages.length, 1),
             status: `${pageLabel} · abgeschlossen`,
           });
         } catch (error) {
-          if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
-            throw error;
+          if (!isCurrentRun() || controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+            throw new DOMException("OCR abgebrochen", "AbortError");
           }
           failedPages.push(targetPage);
           setOcrPageStates((current) => ({ ...current, [targetPage]: "failed" }));
@@ -397,8 +413,9 @@ export function PdfWorkspace({
         }
       }
 
+      ensureCurrentRun();
       setShowTokens(true);
-      setOcrProgress({
+      reportProgress({
         progress: 1,
         status: failedPages.length === 0
           ? `${completedPages} Seite${completedPages === 1 ? "" : "n"} abgeschlossen`
@@ -409,6 +426,9 @@ export function PdfWorkspace({
         + (failedPages.length > 0 ? ` Fehler auf Seite ${failedPages.join(", ")}.` : ""),
       );
     } catch (error) {
+      if (!isCurrentRun()) {
+        return;
+      }
       if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
         setOcrPageStates((current) => Object.fromEntries(
           Object.entries(current).filter(([, state]) => state !== "queued" && state !== "running"),
@@ -422,14 +442,22 @@ export function PdfWorkspace({
         setRenderError(error instanceof Error ? error.message : "OCR ist fehlgeschlagen.");
       }
     } finally {
-      setOcrRunning(false);
-      abortControllerRef.current = undefined;
+      if (ocrRunControllerRef.current.finish(controller)) setOcrRunning(false);
     }
   }
 
   function cancelOcr() {
-    abortControllerRef.current?.abort();
-    setOcrProgress((current) => ({ progress: current?.progress ?? 0, status: "OCR-Warteschlange wird abgebrochen" }));
+    if (!ocrRunControllerRef.current.cancel()) return;
+    setOcrRunning(false);
+    setOcrPageStates((current) => Object.fromEntries(
+      Object.entries(current).filter(([, state]) => state !== "queued" && state !== "running"),
+    ));
+    setOcrProgress((current) => ({
+      progress: current?.progress ?? 0,
+      status: "OCR-Warteschlange abgebrochen",
+    }));
+    setWorkspaceMessage("OCR abgebrochen. Die ausgewählten Seiten können sofort neu gestartet werden.");
+    void ocrEngineRef.current.terminate();
   }
 
   function changeOcrPageSelection(pages: number[]) {
