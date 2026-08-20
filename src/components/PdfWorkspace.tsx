@@ -82,6 +82,8 @@ export function PdfWorkspace({
   const [optimizedPages, setOptimizedPages] = useState<Record<number, HTMLCanvasElement>>({});
   const [ocrProgress, setOcrProgress] = useState<OcrProgress>();
   const [ocrRunning, setOcrRunning] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState<OcrProgress>();
+  const [previewRunning, setPreviewRunning] = useState(false);
   const [ocrSelectedPages, setOcrSelectedPages] = useState<number[]>([1]);
   const [ocrPageStates, setOcrPageStates] = useState<Record<number, OcrBatchPageState>>({});
   const [recipe, setRecipe] = useState<PreprocessingRecipe>({
@@ -103,6 +105,7 @@ export function PdfWorkspace({
   const [sourceInspection, setSourceInspection] = useState<SourceInspection>();
   const ocrEngineRef = useRef(new OcrEngine());
   const ocrRunControllerRef = useRef(new OcrBatchRunController());
+  const previewRunControllerRef = useRef(new OcrBatchRunController());
   const domain = useUndoableState(initialDomainState);
   const sessionId = useMemo(
     () => document.fingerprints[0] ?? `${file.name}-${file.size}-${file.lastModified}`,
@@ -131,6 +134,9 @@ export function PdfWorkspace({
     setRenderError(undefined);
     setOptimizedPages({});
     setOcrProgress(undefined);
+    previewRunControllerRef.current.cancel();
+    setPreviewProgress(undefined);
+    setPreviewRunning(false);
     setOcrSelectedPages([1]);
     setOcrPageStates({});
     setViewMode("original");
@@ -201,6 +207,7 @@ export function PdfWorkspace({
   useEffect(() => {
     return () => {
       ocrRunControllerRef.current.cancel();
+      previewRunControllerRef.current.cancel();
       void ocrEngineRef.current.terminate();
     };
   }, []);
@@ -221,6 +228,7 @@ export function PdfWorkspace({
 
   function changePage(nextPage: number) {
     if (activePhase !== "file" && domain.state.excludedPages.includes(nextPage)) return;
+    cancelOcrPreview();
     setPage(nextPage);
     setSelectedTokenIds([]);
     setDrawingBlock(false);
@@ -245,6 +253,7 @@ export function PdfWorkspace({
     }
 
     if (ocrRunning && ocrSelectedPages.includes(targetPage)) cancelOcr();
+    cancelOcrPreview();
     const remainingPages = includedPages.filter((pageNumber) => pageNumber !== targetPage);
     domain.update((current) => {
       const resultBlocks = current.resultBlocks.flatMap((block) => {
@@ -274,6 +283,7 @@ export function PdfWorkspace({
 
   function rotateCurrentPage() {
     if (ocrRunning) cancelOcr();
+    cancelOcrPreview();
     const nextRotation = ((rotation + 90) % 360) as PageRotation;
     domain.update((current) => ({
       ...current,
@@ -309,7 +319,74 @@ export function PdfWorkspace({
     setWorkspaceMessage(`Seite ${page} auf ${nextRotation}° gedreht. OCR berücksichtigt diese Ausrichtung beim nächsten Lauf.`);
   }
 
+  async function runOcrPreview() {
+    const controller = previewRunControllerRef.current.start();
+    if (!controller) return;
+    const previewPage = page;
+    const previewRotation = rotation;
+    const isCurrentPreview = () => previewRunControllerRef.current.isCurrent(controller);
+    const ensureCurrentPreview = () => {
+      if (!isCurrentPreview() || controller.signal.aborted) {
+        throw new DOMException("Vorschau abgebrochen", "AbortError");
+      }
+    };
+    setPreviewRunning(true);
+    setPreviewProgress({ progress: 0.03, status: `Seite ${previewPage} wird gerendert` });
+    setRenderError(undefined);
+
+    try {
+      const source = await renderPageToCanvas(
+        document,
+        previewPage,
+        2.5,
+        controller.signal,
+        previewRotation,
+      );
+      ensureCurrentPreview();
+      const optimized = await preprocessPage(
+        source,
+        recipe,
+        (progress) => {
+          if (!isCurrentPreview()) return;
+          setPreviewProgress({
+            progress: 0.08 + progress * 0.92,
+            status: "OCR-Einstellungen werden auf die Vorschau angewendet",
+          });
+        },
+        controller.signal,
+      );
+      ensureCurrentPreview();
+      setOptimizedPages((current) => ({ ...current, [previewPage]: optimized }));
+      setViewMode("optimized");
+      setPreviewProgress({ progress: 1, status: `Vorschau für Seite ${previewPage} ist bereit` });
+      setWorkspaceMessage(
+        `Vorschau für Seite ${previewPage} erstellt. Oben können Sie „Original“ und „Optimiert“ vergleichen.`,
+      );
+    } catch (error) {
+      if (isCurrentPreview() && !(error instanceof DOMException && error.name === "AbortError")) {
+        setRenderError(error instanceof Error ? error.message : "Die OCR-Vorschau ist fehlgeschlagen.");
+      }
+    } finally {
+      if (previewRunControllerRef.current.finish(controller)) setPreviewRunning(false);
+    }
+  }
+
+  function cancelOcrPreview() {
+    if (!previewRunControllerRef.current.cancel()) return;
+    setPreviewRunning(false);
+    setPreviewProgress(undefined);
+  }
+
+  function changeRecipe(nextRecipe: PreprocessingRecipe) {
+    cancelOcrPreview();
+    setRecipe(nextRecipe);
+    setOptimizedPages({});
+    setViewMode("original");
+    setPreviewProgress(undefined);
+  }
+
   async function runOcr() {
+    if (previewRunning) return;
     const targetPages = normalizeOcrPageSelection(ocrSelectedPages, includedPages);
     if (targetPages.length === 0) {
       setWorkspaceMessage("Wählen Sie rechts mindestens eine aktive Seite für die OCR aus.");
@@ -840,7 +917,8 @@ export function PdfWorkspace({
             onConfidenceThresholdsChange={setConfidenceThresholds}
             onCancelOcr={cancelOcr}
             onOcrPageSelectionChange={changeOcrPageSelection}
-            onRecipeChange={setRecipe}
+            onPreviewOcr={() => void runOcrPreview()}
+            onRecipeChange={changeRecipe}
             onRunOcr={() => void runOcr()}
             ocrPageStates={ocrPageStates}
             ocrProgress={ocrProgress}
@@ -848,6 +926,8 @@ export function PdfWorkspace({
             page={page}
             pageCount={document.numPages}
             pageRotations={domain.state.pageRotations}
+            previewProgress={previewProgress}
+            previewRunning={previewRunning}
             recipe={recipe}
             renderInfo={currentInfo}
             rotation={rotation}

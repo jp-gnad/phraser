@@ -21,11 +21,14 @@ interface InspectorProps {
   renderInfo?: PageRenderInfo;
   recipe: PreprocessingRecipe;
   onRecipeChange: (recipe: PreprocessingRecipe) => void;
+  onPreviewOcr: () => void;
   onRunOcr: () => void;
   onCancelOcr: () => void;
   onOcrPageSelectionChange: (pages: number[]) => void;
   ocrProgress?: OcrProgress;
   ocrRunning: boolean;
+  previewProgress?: OcrProgress;
+  previewRunning: boolean;
   showOcr?: boolean;
   confidenceThresholds: ConfidenceThresholds;
   onConfidenceThresholdsChange: (thresholds: ConfidenceThresholds) => void;
@@ -58,16 +61,20 @@ export function Inspector({
   renderInfo,
   recipe,
   onRecipeChange,
+  onPreviewOcr,
   onRunOcr,
   onCancelOcr,
   onOcrPageSelectionChange,
   ocrProgress,
   ocrRunning,
+  previewProgress,
+  previewRunning,
   showOcr = true,
   confidenceThresholds,
   onConfidenceThresholdsChange,
 }: InspectorProps) {
   const quality = renderInfo?.assessment.quality ?? "unknown";
+  const settingsBusy = ocrRunning || previewRunning;
 
   return (
     <aside className="inspector" aria-label="Dokumenteigenschaften">
@@ -187,7 +194,7 @@ export function Inspector({
           <input
             max="2"
             min="0.7"
-            disabled={ocrRunning}
+            disabled={settingsBusy}
             onChange={(event) => onRecipeChange({ ...recipe, contrast: Number(event.target.value) })}
             step="0.05"
             type="range"
@@ -200,7 +207,7 @@ export function Inspector({
           <input
             max="3"
             min="-3"
-            disabled={ocrRunning}
+            disabled={settingsBusy}
             onChange={(event) =>
               onRecipeChange({ ...recipe, deskewDegrees: Number(event.target.value) })
             }
@@ -213,7 +220,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.grayscale}
-            disabled={ocrRunning}
+            disabled={settingsBusy}
             onChange={(event) => onRecipeChange({ ...recipe, grayscale: event.target.checked })}
             type="checkbox"
           />
@@ -222,7 +229,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.adaptiveThreshold}
-            disabled={ocrRunning}
+            disabled={settingsBusy}
             onChange={(event) =>
               onRecipeChange({ ...recipe, adaptiveThreshold: event.target.checked })
             }
@@ -236,7 +243,7 @@ export function Inspector({
             <input
               max="230"
               min="60"
-              disabled={ocrRunning}
+              disabled={settingsBusy}
               onChange={(event) => onRecipeChange({ ...recipe, threshold: Number(event.target.value) })}
               step="1"
               type="range"
@@ -247,7 +254,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.denoise}
-            disabled={ocrRunning}
+            disabled={settingsBusy}
             onChange={(event) => onRecipeChange({ ...recipe, denoise: event.target.checked })}
             type="checkbox"
           />
@@ -256,7 +263,7 @@ export function Inspector({
         <label className="check-control">
           <input
             checked={recipe.cropDarkBorders}
-            disabled={ocrRunning}
+            disabled={settingsBusy}
             onChange={(event) =>
               onRecipeChange({ ...recipe, cropDarkBorders: event.target.checked })
             }
@@ -265,6 +272,30 @@ export function Inspector({
           Dunkle Scanränder entfernen
         </label>
 
+        <div className="ocr-preview-card">
+          <strong>Einstellungen vorab ansehen</strong>
+          <p>
+            Erzeugt nur für Seite {page} ein optimiertes Bild – ohne Texterkennung und ohne
+            die PDF-Datei zu verändern.
+          </p>
+          <button
+            className="secondary-button full-width"
+            disabled={ocrRunning || previewRunning}
+            onClick={onPreviewOcr}
+            type="button"
+          >
+            {previewRunning ? "Vorschau wird erstellt …" : `Vorschau für Seite ${page} erzeugen`}
+          </button>
+          {previewRunning || previewProgress ? (
+            <div className="ocr-preview-progress" aria-live="polite">
+              <span>{previewProgress?.status ?? "Vorschau wird vorbereitet"}</span>
+              <strong>{Math.round((previewProgress?.progress ?? 0) * 100)} %</strong>
+              <progress max="1" value={previewProgress?.progress ?? 0} />
+            </div>
+          ) : null}
+          <small>Danach oben zwischen „Original“ und „Optimiert“ wechseln.</small>
+        </div>
+
         <div className="confidence-settings">
           <strong>Confidence-Grenzen</strong>
           <label className="range-control">
@@ -272,7 +303,7 @@ export function Inspector({
             <input
               max="100"
               min={confidenceThresholds.review + 1}
-              disabled={ocrRunning}
+              disabled={settingsBusy}
               onChange={(event) => onConfidenceThresholdsChange({ ...confidenceThresholds, safe: Number(event.target.value) })}
               type="range"
               value={confidenceThresholds.safe}
@@ -283,7 +314,7 @@ export function Inspector({
             <input
               max={confidenceThresholds.safe - 1}
               min="1"
-              disabled={ocrRunning}
+              disabled={settingsBusy}
               onChange={(event) => onConfidenceThresholdsChange({ ...confidenceThresholds, review: Number(event.target.value) })}
               type="range"
               value={confidenceThresholds.review}
@@ -303,7 +334,7 @@ export function Inspector({
         ) : (
           <button
             className="primary-button full-width"
-            disabled={selectedOcrPages.length === 0}
+            disabled={previewRunning || selectedOcrPages.length === 0}
             onClick={onRunOcr}
             type="button"
           >

@@ -10,6 +10,9 @@ export interface OcrProgress {
 
 export class OcrEngine {
   private worker?: import("tesseract.js").Worker;
+  private workerInitialization?: Promise<import("tesseract.js").Worker>;
+  private workerGeneration = 0;
+  private progressHandler?: (progress: OcrProgress) => void;
 
   async recognize(
     image: HTMLCanvasElement,
@@ -22,8 +25,10 @@ export class OcrEngine {
     onProgress: (progress: OcrProgress) => void,
     signal?: AbortSignal,
   ): Promise<OcrPageResult> {
+    throwIfAborted(signal);
     const cacheKey = createOcrCacheKey(documentFingerprint, page, renderScale, pageRotation, recipe);
     const cached = await getCachedOcrResult(cacheKey);
+    throwIfAborted(signal);
     if (cached) {
       onProgress({ progress: 1, status: "OCR-Ergebnis aus lokalem Cache", fromCache: true });
       return applyThresholds(cached, thresholds);
@@ -32,27 +37,20 @@ export class OcrEngine {
     const tesseract = await import("tesseract.js");
     const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin).href;
     const handleAbort = () => void this.terminate();
+    this.progressHandler = onProgress;
     signal?.addEventListener("abort", handleAbort, { once: true });
 
     try {
-      this.worker ??= await tesseract.createWorker("deu", tesseract.OEM.LSTM_ONLY, {
-        workerPath: `${baseUrl}tesseract/worker.min.js`,
-        corePath: `${baseUrl}tesseract/core`,
-        langPath: `${baseUrl}tesseract/lang`,
-        gzip: true,
-        cacheMethod: "write",
-        logger: (message) => {
-          onProgress({ progress: message.progress, status: translateOcrStatus(message.status) });
-        },
-      });
+      throwIfAborted(signal);
+      const worker = await this.getOrCreateWorker(tesseract, baseUrl);
+      throwIfAborted(signal);
 
-      if (signal?.aborted) throw new DOMException("OCR abgebrochen", "AbortError");
-
-      const { data } = await this.worker.recognize(
+      const { data } = await worker.recognize(
         image,
         { rotateAuto: false },
         { text: true, blocks: true },
       );
+      throwIfAborted(signal);
       const tokens = flattenWords(
         data.blocks,
         page,
@@ -73,18 +71,73 @@ export class OcrEngine {
         createdAt: new Date().toISOString(),
       };
       await cacheOcrResult(result);
+      throwIfAborted(signal);
       onProgress({ progress: 1, status: "OCR abgeschlossen" });
       return result;
     } finally {
+      if (this.progressHandler === onProgress) this.progressHandler = undefined;
       signal?.removeEventListener("abort", handleAbort);
     }
   }
 
   async terminate(): Promise<void> {
+    this.workerGeneration += 1;
     const worker = this.worker;
+    const initialization = this.workerInitialization;
     this.worker = undefined;
-    if (worker) await worker.terminate();
+    this.workerInitialization = undefined;
+    this.progressHandler = undefined;
+    try {
+      if (worker) await worker.terminate();
+      if (initialization) await initialization;
+    } catch {
+      // Initialisierung und laufende Erkennung dürfen beim Abbruch kontrolliert verwerfen.
+    }
   }
+
+  private async getOrCreateWorker(
+    tesseract: typeof import("tesseract.js"),
+    baseUrl: string,
+  ): Promise<import("tesseract.js").Worker> {
+    if (this.worker) return this.worker;
+    if (this.workerInitialization) return this.workerInitialization;
+
+    const generation = this.workerGeneration;
+    const initialization = (async () => {
+      const worker = await tesseract.createWorker("deu", tesseract.OEM.LSTM_ONLY, {
+        workerPath: `${baseUrl}tesseract/worker.min.js`,
+        corePath: `${baseUrl}tesseract/core`,
+        langPath: `${baseUrl}tesseract/lang`,
+        gzip: true,
+        cacheMethod: "write",
+        logger: (message) => {
+          this.progressHandler?.({
+            progress: message.progress,
+            status: translateOcrStatus(message.status),
+          });
+        },
+      });
+      if (generation !== this.workerGeneration) {
+        try {
+          await worker.terminate();
+        } finally {
+          throw new DOMException("OCR abgebrochen", "AbortError");
+        }
+      }
+      this.worker = worker;
+      return worker;
+    })();
+    this.workerInitialization = initialization;
+    try {
+      return await initialization;
+    } finally {
+      if (this.workerInitialization === initialization) this.workerInitialization = undefined;
+    }
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("OCR abgebrochen", "AbortError");
 }
 
 function flattenWords(
