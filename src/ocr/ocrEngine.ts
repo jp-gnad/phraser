@@ -1,4 +1,4 @@
-import type { OCRToken, OcrPageResult, PreprocessingRecipe } from "../models";
+import type { ConfidenceThresholds, OCRToken, OcrPageResult, PreprocessingRecipe } from "../models";
 import { cacheOcrResult, getCachedOcrResult } from "../storage/database";
 
 export interface OcrProgress {
@@ -16,6 +16,7 @@ export class OcrEngine {
     documentFingerprint: string,
     renderScale: number,
     recipe: PreprocessingRecipe,
+    thresholds: ConfidenceThresholds,
     onProgress: (progress: OcrProgress) => void,
     signal?: AbortSignal,
   ): Promise<OcrPageResult> {
@@ -23,7 +24,7 @@ export class OcrEngine {
     const cached = await getCachedOcrResult(cacheKey);
     if (cached) {
       onProgress({ progress: 1, status: "OCR-Ergebnis aus lokalem Cache", fromCache: true });
-      return cached;
+      return applyThresholds(cached, thresholds);
     }
 
     const tesseract = await import("tesseract.js");
@@ -50,7 +51,7 @@ export class OcrEngine {
         { rotateAuto: false },
         { text: true, blocks: true },
       );
-      const tokens = flattenWords(data.blocks, page, image.width, image.height);
+      const tokens = flattenWords(data.blocks, page, image.width, image.height, thresholds);
       const result: OcrPageResult = {
         page,
         tokens,
@@ -81,6 +82,7 @@ function flattenWords(
   page: number,
   width: number,
   height: number,
+  thresholds: ConfidenceThresholds,
 ): OCRToken[] {
   const tokens: OCRToken[] = [];
   for (const [blockIndex, block] of (blocks ?? []).entries()) {
@@ -92,7 +94,7 @@ function flattenWords(
             id: `ocr-${page}-${blockIndex}-${paragraphIndex}-${lineIndex}-${wordIndex}`,
             text: word.text,
             confidence,
-            confidenceLevel: confidence >= 90 ? "safe" : confidence >= 70 ? "review" : "critical",
+            confidenceLevel: confidence >= thresholds.safe ? "safe" : confidence >= thresholds.review ? "review" : "critical",
             page,
             bounds: {
               x: word.bbox.x0 / width,
@@ -109,6 +111,20 @@ function flattenWords(
     }
   }
   return tokens;
+}
+
+function applyThresholds(result: OcrPageResult, thresholds: ConfidenceThresholds): OcrPageResult {
+  return {
+    ...result,
+    tokens: result.tokens.map((token) => ({
+      ...token,
+      confidenceLevel: token.confidence >= thresholds.safe
+        ? "safe"
+        : token.confidence >= thresholds.review
+          ? "review"
+          : "critical",
+    })),
+  };
 }
 
 function createOcrCacheKey(

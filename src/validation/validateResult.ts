@@ -22,6 +22,9 @@ export function validateResult(result: IndividualCompetitionResult): ValidationI
   if (result.gender && result.gender !== "m" && result.gender !== "w") {
     add("invalid-gender", "Gender darf im Export nur m, w oder leer sein.", "gender", "error");
   }
+  if (result.rawGender?.trim() && !result.gender) {
+    add("ambiguous-gender", "Gender konnte nicht eindeutig zu m oder w normalisiert werden.", "gender", "warning");
+  }
   if (result.birthYear && !normalizeBirthYear(result.birthYear)) {
     add("suspicious-birth-year", "Jahrgang enthält kein eindeutiges zwei- oder vierstelliges Jahr.", "birthYear", "warning");
   }
@@ -51,4 +54,3 @@ export function validateResult(result: IndividualCompetitionResult): ValidationI
 
   return issues;
 }
-

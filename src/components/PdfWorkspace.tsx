@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type {
   BlockClassification,
+  ConfidenceThresholds,
   DisciplineDefinition,
   GlobalFieldRule,
   MappingRule,
@@ -81,6 +82,7 @@ export function PdfWorkspace({
     deskewDegrees: 0,
     cropDarkBorders: true,
   });
+  const [confidenceThresholds, setConfidenceThresholds] = useState<ConfidenceThresholds>({ safe: 90, review: 70 });
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
   const [activeBlockId, setActiveBlockId] = useState<string>();
   const [drawingBlock, setDrawingBlock] = useState(false);
@@ -133,6 +135,8 @@ export function PdfWorkspace({
     if (activePhase === "mapping") {
       setRotation(0);
       setShowTokens(true);
+      setSourceInspection(undefined);
+      setSelectedTokenIds([]);
     }
   }, [activePhase]);
 
@@ -190,6 +194,7 @@ export function PdfWorkspace({
         sessionId,
         2.5,
         recipe,
+        confidenceThresholds,
         (progress) => setOcrProgress({ ...progress, progress: 0.18 + progress.progress * 0.82 }),
         controller.signal,
       );
@@ -423,12 +428,19 @@ export function PdfWorkspace({
         .filter((rule) => rule.scope.kind === "document")
         .map((rule) => [rule.key, rule.normalizedValue ?? rule.rawValue]),
     ) as WorkspaceMetadata;
+    const scopedRules = template.globalRules.flatMap((rule) => {
+      if (rule.scope.kind === "athlete") return [];
+      if (rule.scope.kind === "block") {
+        return activeBlockId ? [{ ...rule, id: crypto.randomUUID(), scope: { kind: "block" as const, blockId: activeBlockId } }] : [];
+      }
+      return [{ ...rule, id: crypto.randomUUID() }];
+    });
     domain.update((current) => ({
       ...current,
       fieldRules: structuredClone(template.fieldRules),
       disciplines: structuredClone(template.disciplines),
       metadata: { ...current.metadata, ...metadata },
-      globalRules: structuredClone(template.globalRules),
+      globalRules: scopedRules,
       mappingMode: template.fieldRules[0]?.mode ?? current.mappingMode,
       results: [],
     }));
@@ -546,6 +558,8 @@ export function PdfWorkspace({
         ) : (
           <Inspector
             file={file}
+            confidenceThresholds={confidenceThresholds}
+            onConfidenceThresholdsChange={setConfidenceThresholds}
             onCancelOcr={cancelOcr}
             onRecipeChange={setRecipe}
             onRunOcr={() => void runOcr()}

@@ -884,6 +884,17 @@ input:focus-visible,
   border-radius: 6px;
 }
 
+.confidence-settings {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #dfe6e2;
+}
+
+.confidence-settings > strong {
+  color: #4f5f59;
+  font-size: 8px;
+}
+
 .ocr-progress div {
   display: flex;
   justify-content: space-between;

@@ -1,6 +1,6 @@
 import type { PageRenderInfo } from "./PdfCanvas";
 import { formatFileSize } from "../utils/fileValidation";
-import type { PreprocessingRecipe } from "../models";
+import type { ConfidenceThresholds, PreprocessingRecipe } from "../models";
 import type { OcrProgress } from "../ocr/ocrEngine";
 
 interface InspectorProps {
@@ -15,6 +15,8 @@ interface InspectorProps {
   ocrProgress?: OcrProgress;
   ocrRunning: boolean;
   showOcr?: boolean;
+  confidenceThresholds: ConfidenceThresholds;
+  onConfidenceThresholdsChange: (thresholds: ConfidenceThresholds) => void;
 }
 
 const qualityLabels = {
@@ -36,6 +38,8 @@ export function Inspector({
   ocrProgress,
   ocrRunning,
   showOcr = true,
+  confidenceThresholds,
+  onConfidenceThresholdsChange,
 }: InspectorProps) {
   const quality = renderInfo?.assessment.quality ?? "unknown";
 
@@ -161,6 +165,30 @@ export function Inspector({
           />
           Dunkle Scanränder entfernen
         </label>
+
+        <div className="confidence-settings">
+          <strong>Confidence-Grenzen</strong>
+          <label className="range-control">
+            <span><span>sicher ab</span><strong>{confidenceThresholds.safe} %</strong></span>
+            <input
+              max="100"
+              min={confidenceThresholds.review + 1}
+              onChange={(event) => onConfidenceThresholdsChange({ ...confidenceThresholds, safe: Number(event.target.value) })}
+              type="range"
+              value={confidenceThresholds.safe}
+            />
+          </label>
+          <label className="range-control">
+            <span><span>prüfen ab</span><strong>{confidenceThresholds.review} %</strong></span>
+            <input
+              max={confidenceThresholds.safe - 1}
+              min="1"
+              onChange={(event) => onConfidenceThresholdsChange({ ...confidenceThresholds, review: Number(event.target.value) })}
+              type="range"
+              value={confidenceThresholds.review}
+            />
+          </label>
+        </div>
 
         {ocrRunning || ocrProgress ? (
           <div className="ocr-progress" aria-live="polite">

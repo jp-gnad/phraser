@@ -14,14 +14,17 @@ export default defineConfig(({ mode }) => {
           {
             src: "node_modules/tesseract.js/dist/worker.min.js",
             dest: "tesseract",
+            rename: { stripBase: true },
           },
           {
             src: "node_modules/tesseract.js-core/tesseract-core*-lstm.wasm*",
             dest: "tesseract/core",
+            rename: { stripBase: true },
           },
           {
             src: "node_modules/@tesseract.js-data/deu/4.0.0_best_int/deu.traineddata.gz",
             dest: "tesseract/lang",
+            rename: { stripBase: true },
           },
         ],
       }),
