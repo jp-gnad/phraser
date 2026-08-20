@@ -188,6 +188,7 @@ export function PdfWorkspace({
         optimized,
         page,
         sessionId,
+        2.5,
         recipe,
         (progress) => setOcrProgress({ ...progress, progress: 0.18 + progress.progress * 0.82 }),
         controller.signal,

@@ -14,11 +14,12 @@ export class OcrEngine {
     image: HTMLCanvasElement,
     page: number,
     documentFingerprint: string,
+    renderScale: number,
     recipe: PreprocessingRecipe,
     onProgress: (progress: OcrProgress) => void,
     signal?: AbortSignal,
   ): Promise<OcrPageResult> {
-    const cacheKey = createOcrCacheKey(documentFingerprint, page, recipe);
+    const cacheKey = createOcrCacheKey(documentFingerprint, page, renderScale, recipe);
     const cached = await getCachedOcrResult(cacheKey);
     if (cached) {
       onProgress({ progress: 1, status: "OCR-Ergebnis aus lokalem Cache", fromCache: true });
@@ -55,7 +56,7 @@ export class OcrEngine {
         tokens,
         aggregateConfidence: data.confidence,
         language: "deu",
-        renderScale: image.width,
+        renderScale,
         recipe,
         cacheKey,
         createdAt: new Date().toISOString(),
@@ -113,9 +114,10 @@ function flattenWords(
 function createOcrCacheKey(
   fingerprint: string,
   page: number,
+  renderScale: number,
   recipe: PreprocessingRecipe,
 ): string {
-  return `ocr-v1:${fingerprint}:${page}:${JSON.stringify(recipe)}`;
+  return `ocr-v1:${fingerprint}:${page}:${renderScale}:${JSON.stringify(recipe)}`;
 }
 
 function translateOcrStatus(status: string): string {
@@ -128,4 +130,3 @@ function translateOcrStatus(status: string): string {
   };
   return labels[status] ?? status;
 }
-
