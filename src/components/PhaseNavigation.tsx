@@ -1,21 +1,35 @@
-const phases = ["Datei", "OCR", "Mapping", "Teilnehmer", "Prüfen", "Export"] as const;
+export type AppPhase = "file" | "ocr" | "mapping" | "participants" | "review" | "export";
 
-export function PhaseNavigation() {
+const phases: Array<{ id: AppPhase; label: string }> = [
+  { id: "file", label: "Datei" },
+  { id: "ocr", label: "OCR" },
+  { id: "mapping", label: "Mapping" },
+  { id: "participants", label: "Teilnehmer" },
+  { id: "review", label: "Prüfen" },
+  { id: "export", label: "Export" },
+];
+
+interface PhaseNavigationProps {
+  active: AppPhase;
+  enabled: boolean;
+  onChange: (phase: AppPhase) => void;
+}
+
+export function PhaseNavigation({ active, enabled, onChange }: PhaseNavigationProps) {
   return (
     <nav className="phase-navigation" aria-label="Arbeitsphasen">
       {phases.map((phase, index) => (
         <button
-          className={index === 0 ? "phase-item is-active" : "phase-item"}
-          disabled={index > 0}
-          key={phase}
-          title={index > 0 ? "Wird in einer folgenden Entwicklungsphase freigeschaltet" : undefined}
+          className={phase.id === active ? "phase-item is-active" : "phase-item"}
+          disabled={!enabled && index > 0}
+          key={phase.id}
+          onClick={() => onChange(phase.id)}
           type="button"
         >
           <span className="phase-number">{index + 1}</span>
-          {phase}
+          {phase.label}
         </button>
       ))}
     </nav>
   );
 }
-
