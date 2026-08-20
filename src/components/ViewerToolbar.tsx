@@ -5,6 +5,11 @@ interface ViewerToolbarProps {
   onPageChange: (page: number) => void;
   onZoomChange: (zoom: number) => void;
   onRotate: () => void;
+  showTokens: boolean;
+  onShowTokensChange: (visible: boolean) => void;
+  viewMode: "original" | "optimized";
+  optimizedAvailable: boolean;
+  onViewModeChange: (mode: "original" | "optimized") => void;
 }
 
 export function ViewerToolbar({
@@ -14,6 +19,11 @@ export function ViewerToolbar({
   onPageChange,
   onZoomChange,
   onRotate,
+  showTokens,
+  onShowTokensChange,
+  viewMode,
+  optimizedAvailable,
+  onViewModeChange,
 }: ViewerToolbarProps) {
   return (
     <div className="viewer-toolbar" role="toolbar" aria-label="PDF-Ansicht">
@@ -38,6 +48,34 @@ export function ViewerToolbar({
         >
           →
         </button>
+      </div>
+
+      <div className="toolbar-segmented" aria-label="Seitenansicht">
+        <button
+          aria-pressed={viewMode === "original"}
+          className={viewMode === "original" ? "is-active" : ""}
+          onClick={() => onViewModeChange("original")}
+          type="button"
+        >
+          Original
+        </button>
+        <button
+          aria-pressed={viewMode === "optimized"}
+          className={viewMode === "optimized" ? "is-active" : ""}
+          disabled={!optimizedAvailable}
+          onClick={() => onViewModeChange("optimized")}
+          type="button"
+        >
+          OCR-optimiert
+        </button>
+        <label>
+          <input
+            checked={showTokens}
+            onChange={(event) => onShowTokensChange(event.target.checked)}
+            type="checkbox"
+          />
+          Boxen
+        </label>
       </div>
 
       <div className="toolbar-group">
@@ -65,4 +103,3 @@ export function ViewerToolbar({
     </div>
   );
 }
-

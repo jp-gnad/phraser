@@ -1,11 +1,19 @@
 import type { PageRenderInfo } from "./PdfCanvas";
 import { formatFileSize } from "../utils/fileValidation";
+import type { PreprocessingRecipe } from "../models";
+import type { OcrProgress } from "../ocr/ocrEngine";
 
 interface InspectorProps {
   file: File;
   page: number;
   pageCount: number;
   renderInfo?: PageRenderInfo;
+  recipe: PreprocessingRecipe;
+  onRecipeChange: (recipe: PreprocessingRecipe) => void;
+  onRunOcr: () => void;
+  onCancelOcr: () => void;
+  ocrProgress?: OcrProgress;
+  ocrRunning: boolean;
 }
 
 const qualityLabels = {
@@ -15,7 +23,18 @@ const qualityLabels = {
   unknown: "Noch nicht analysiert",
 } as const;
 
-export function Inspector({ file, page, pageCount, renderInfo }: InspectorProps) {
+export function Inspector({
+  file,
+  page,
+  pageCount,
+  renderInfo,
+  recipe,
+  onRecipeChange,
+  onRunOcr,
+  onCancelOcr,
+  ocrProgress,
+  ocrRunning,
+}: InspectorProps) {
   const quality = renderInfo?.assessment.quality ?? "unknown";
 
   return (
@@ -56,21 +75,86 @@ export function Inspector({ file, page, pageCount, renderInfo }: InspectorProps)
           </div>
         </div>
         <p className="inspector-note">
-          Die automatische Qualitätsentscheidung und OCR werden in Phase 2 ergänzt. In Phase 1
-          dient dieser Wert nur als transparente Ersteinschätzung.
+          Eine gute PDF-Textebene wird direkt verwendet. Für Scans kann die Seite lokal optimiert
+          und mit deutschem Sprachmodell erkannt werden.
         </p>
       </section>
 
-      <section className="inspector-section next-step-card">
-        <span className="inspector-kicker">Danach</span>
-        <h3>Einzelbereiche markieren</h3>
-        <p>
-          Ergebnisblöcke werden später ausdrücklich als Einzel, Mannschaft/Staffel oder
-          ignoriert klassifiziert. Nur bestätigte Einzelblöcke dürfen in den Export.
-        </p>
-        <button disabled type="button">In Phase 3 verfügbar</button>
+      <section className="inspector-section ocr-settings">
+        <span className="inspector-kicker">Bildvorverarbeitung</span>
+        <h3>OCR für Seite {page}</h3>
+
+        <label className="range-control">
+          <span><span>Kontrast</span><strong>{recipe.contrast.toFixed(2)}</strong></span>
+          <input
+            max="2"
+            min="0.7"
+            onChange={(event) => onRecipeChange({ ...recipe, contrast: Number(event.target.value) })}
+            step="0.05"
+            type="range"
+            value={recipe.contrast}
+          />
+        </label>
+
+        <label className="range-control">
+          <span><span>Schräglage</span><strong>{recipe.deskewDegrees ?? 0}°</strong></span>
+          <input
+            max="3"
+            min="-3"
+            onChange={(event) =>
+              onRecipeChange({ ...recipe, deskewDegrees: Number(event.target.value) })
+            }
+            step="0.25"
+            type="range"
+            value={recipe.deskewDegrees ?? 0}
+          />
+        </label>
+
+        <label className="check-control">
+          <input
+            checked={recipe.adaptiveThreshold}
+            onChange={(event) =>
+              onRecipeChange({ ...recipe, adaptiveThreshold: event.target.checked })
+            }
+            type="checkbox"
+          />
+          Adaptive Binarisierung
+        </label>
+        <label className="check-control">
+          <input
+            checked={recipe.denoise}
+            onChange={(event) => onRecipeChange({ ...recipe, denoise: event.target.checked })}
+            type="checkbox"
+          />
+          Entrauschen
+        </label>
+        <label className="check-control">
+          <input
+            checked={recipe.cropDarkBorders}
+            onChange={(event) =>
+              onRecipeChange({ ...recipe, cropDarkBorders: event.target.checked })
+            }
+            type="checkbox"
+          />
+          Dunkle Scanränder entfernen
+        </label>
+
+        {ocrRunning || ocrProgress ? (
+          <div className="ocr-progress" aria-live="polite">
+            <div><span>{ocrProgress?.status ?? "OCR wird vorbereitet"}</span><strong>{Math.round((ocrProgress?.progress ?? 0) * 100)} %</strong></div>
+            <progress max="1" value={ocrProgress?.progress ?? 0} />
+          </div>
+        ) : null}
+
+        {ocrRunning ? (
+          <button className="danger-button" onClick={onCancelOcr} type="button">Abbrechen</button>
+        ) : (
+          <button className="primary-button full-width" onClick={onRunOcr} type="button">
+            {renderInfo?.tokens.some((token) => token.source === "ocr") ? "OCR erneut ausführen" : "OCR lokal durchführen"}
+          </button>
+        )}
+        <p className="inspector-note">OCR-Kern, Sprachmodell und Bilddaten bleiben auf diesem Gerät.</p>
       </section>
     </aside>
   );
 }
-
