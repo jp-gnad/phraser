@@ -9,3 +9,4 @@ export * from "./session";
 export * from "./storage";
 export * from "./template";
 export * from "./validation";
+export * from "./workspace";

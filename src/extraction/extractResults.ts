@@ -48,7 +48,7 @@ export function extractResults(input: ExtractionInput): IndividualCompetitionRes
   const tokens = input.tokens.filter(
     (token) => token.page === page && blockBounds.some((bounds) => intersects(token.bounds, bounds)),
   );
-  const rules = input.rules.filter((rule) => rule.samplePage === page);
+  const rules = input.rules;
   const matches = input.mode === "columns"
     ? matchColumnRows(tokens, rules)
     : matchRepeatedSamples(tokens, rules);
