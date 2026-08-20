@@ -155,6 +155,7 @@ function buildResult(
 ): IndividualCompetitionResult | undefined {
   const fieldValues: Record<string, ExtractedValue<string | number>> = {};
   const person: Record<string, string | undefined> = {};
+  const competition: Record<string, string | undefined> = {};
   const disciplineValues = new Map<string, Partial<Record<string, FieldMatch>>>();
   let overallRank: string | undefined;
   let overallPoints: string | undefined;
@@ -170,6 +171,7 @@ function buildResult(
     if (target.group === "person") person[target.field] = field.value;
     if (target.group === "overall" && target.field === "overallRank") overallRank = field.value;
     if (target.group === "overall" && target.field === "overallPoints") overallPoints = field.value;
+    if (target.group === "competition") competition[target.field] = field.value;
     if (target.group === "discipline") {
       const values = disciplineValues.get(target.disciplineId) ?? {};
       values[target.field] = field;
@@ -225,9 +227,9 @@ function buildResult(
     overallRank,
     overallPoints,
     disciplineResults,
-    competitionDate: input.metadata.competitionDate,
-    competitionName: input.metadata.competitionName,
-    competitionLocation: input.metadata.competitionLocation,
+    competitionDate: competition.competitionDate ?? input.metadata.competitionDate,
+    competitionName: competition.competitionName ?? input.metadata.competitionName,
+    competitionLocation: competition.competitionLocation ?? input.metadata.competitionLocation,
     competitionCode: input.metadata.competitionCode,
     poolLength: input.metadata.poolLength,
     country: input.metadata.country,

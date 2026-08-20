@@ -295,6 +295,9 @@ function createTargetOptions(disciplines: DisciplineDefinition[]) {
     ["person.nationalAssociation", "Person · Bundesverband"],
     ["overall.overallRank", "Gesamtwertung · Platzierung"],
     ["overall.overallPoints", "Gesamtwertung · Punktzahl"],
+    ["competition.competitionDate", "Wettkampf · Datum"],
+    ["competition.competitionName", "Wettkampf · Name"],
+    ["competition.competitionLocation", "Wettkampf · Ort"],
   ].map(([value, label]) => ({ value: value!, label: label! }));
   return [
     ...base,
@@ -322,6 +325,7 @@ function parseTarget(value: string): MappingTarget {
   const [group, field] = value.split(".");
   if (group === "person") return { group, field: field as "fullName" };
   if (group === "overall") return { group, field: field as "overallRank" | "overallPoints" };
+  if (group === "competition") return { group, field: field as "competitionDate" | "competitionName" | "competitionLocation" };
   return { group: "other", field: "ignore" };
 }
 
