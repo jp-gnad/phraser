@@ -72,6 +72,8 @@ export interface MappingRule {
   joinStrategy: "word" | "line" | "region";
   required: boolean;
   formatHint?: "text" | "integer" | "decimal" | "time" | "status";
+  samplePage?: number;
+  sampleTokenIds?: EntityId[];
 }
 
 export type MetadataScope =
@@ -114,4 +116,3 @@ export interface MappingDraft {
   disciplines: DisciplineDefinition[];
   globalRules: GlobalFieldRule[];
 }
-
