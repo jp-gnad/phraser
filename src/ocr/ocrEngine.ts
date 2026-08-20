@@ -1,5 +1,6 @@
-import type { ConfidenceThresholds, OCRToken, OcrPageResult, PreprocessingRecipe } from "../models";
+import type { ConfidenceThresholds, OCRToken, OcrPageResult, PageRotation, PreprocessingRecipe } from "../models";
 import { cacheOcrResult, getCachedOcrResult } from "../storage/database";
+import { inversePageRotation, rotateNormalizedRect } from "../utils/geometry";
 
 export interface OcrProgress {
   progress: number;
@@ -15,12 +16,13 @@ export class OcrEngine {
     page: number,
     documentFingerprint: string,
     renderScale: number,
+    pageRotation: PageRotation,
     recipe: PreprocessingRecipe,
     thresholds: ConfidenceThresholds,
     onProgress: (progress: OcrProgress) => void,
     signal?: AbortSignal,
   ): Promise<OcrPageResult> {
-    const cacheKey = createOcrCacheKey(documentFingerprint, page, renderScale, recipe);
+    const cacheKey = createOcrCacheKey(documentFingerprint, page, renderScale, pageRotation, recipe);
     const cached = await getCachedOcrResult(cacheKey);
     if (cached) {
       onProgress({ progress: 1, status: "OCR-Ergebnis aus lokalem Cache", fromCache: true });
@@ -51,13 +53,21 @@ export class OcrEngine {
         { rotateAuto: false },
         { text: true, blocks: true },
       );
-      const tokens = flattenWords(data.blocks, page, image.width, image.height, thresholds);
+      const tokens = flattenWords(
+        data.blocks,
+        page,
+        image.width,
+        image.height,
+        pageRotation,
+        thresholds,
+      );
       const result: OcrPageResult = {
         page,
         tokens,
         aggregateConfidence: data.confidence,
         language: "deu",
         renderScale,
+        pageRotation,
         recipe,
         cacheKey,
         createdAt: new Date().toISOString(),
@@ -82,6 +92,7 @@ function flattenWords(
   page: number,
   width: number,
   height: number,
+  pageRotation: PageRotation,
   thresholds: ConfidenceThresholds,
 ): OCRToken[] {
   const tokens: OCRToken[] = [];
@@ -90,18 +101,19 @@ function flattenWords(
       for (const [lineIndex, line] of paragraph.lines.entries()) {
         for (const [wordIndex, word] of line.words.entries()) {
           const confidence = Math.max(0, Math.min(100, word.confidence));
+          const recognizedBounds = {
+            x: word.bbox.x0 / width,
+            y: word.bbox.y0 / height,
+            width: (word.bbox.x1 - word.bbox.x0) / width,
+            height: (word.bbox.y1 - word.bbox.y0) / height,
+          };
           tokens.push({
             id: `ocr-${page}-${blockIndex}-${paragraphIndex}-${lineIndex}-${wordIndex}`,
             text: word.text,
             confidence,
             confidenceLevel: confidence >= thresholds.safe ? "safe" : confidence >= thresholds.review ? "review" : "critical",
             page,
-            bounds: {
-              x: word.bbox.x0 / width,
-              y: word.bbox.y0 / height,
-              width: (word.bbox.x1 - word.bbox.x0) / width,
-              height: (word.bbox.y1 - word.bbox.y0) / height,
-            },
+            bounds: rotateNormalizedRect(recognizedBounds, inversePageRotation(pageRotation)),
             source: "ocr",
             lineId: `ocr-line-${page}-${blockIndex}-${paragraphIndex}-${lineIndex}`,
             blockId: `ocr-block-${page}-${blockIndex}`,
@@ -131,9 +143,10 @@ function createOcrCacheKey(
   fingerprint: string,
   page: number,
   renderScale: number,
+  pageRotation: PageRotation,
   recipe: PreprocessingRecipe,
 ): string {
-  return `ocr-v1:${fingerprint}:${page}:${renderScale}:${JSON.stringify(recipe)}`;
+  return `ocr-v2:${fingerprint}:${page}:${pageRotation}:${renderScale}:${JSON.stringify(recipe)}`;
 }
 
 function translateOcrStatus(status: string): string {

@@ -1,7 +1,12 @@
+import type { PageRotation } from "../models";
+
 interface ViewerToolbarProps {
   page: number;
   pageCount: number;
+  previousPage?: number;
+  nextPage?: number;
   zoom: number;
+  rotation: PageRotation;
   onPageChange: (page: number) => void;
   onZoomChange: (zoom: number) => void;
   onRotate: () => void;
@@ -15,7 +20,10 @@ interface ViewerToolbarProps {
 export function ViewerToolbar({
   page,
   pageCount,
+  previousPage,
+  nextPage,
   zoom,
+  rotation,
   onPageChange,
   onZoomChange,
   onRotate,
@@ -30,8 +38,8 @@ export function ViewerToolbar({
       <div className="toolbar-group">
         <button
           aria-label="Vorherige Seite"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
+          disabled={previousPage === undefined}
+          onClick={() => previousPage !== undefined && onPageChange(previousPage)}
           type="button"
         >
           ←
@@ -42,8 +50,8 @@ export function ViewerToolbar({
         </span>
         <button
           aria-label="Nächste Seite"
-          disabled={page >= pageCount}
-          onClick={() => onPageChange(page + 1)}
+          disabled={nextPage === undefined}
+          onClick={() => nextPage !== undefined && onPageChange(nextPage)}
           type="button"
         >
           →
@@ -96,9 +104,15 @@ export function ViewerToolbar({
         >
           +
         </button>
-        <button aria-label="Im Uhrzeigersinn drehen" onClick={onRotate} type="button">
+        <button
+          aria-label={`Seite im Uhrzeigersinn drehen, aktuell ${rotation} Grad`}
+          onClick={onRotate}
+          title="OCR-Ausrichtung dieser Seite um 90° drehen"
+          type="button"
+        >
           ↻
         </button>
+        <span className="rotation-label">{rotation}°</span>
       </div>
     </div>
   );

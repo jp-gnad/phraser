@@ -1,13 +1,15 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PageRotation } from "../models";
 
 export async function renderPageToCanvas(
   document: PDFDocumentProxy,
   pageNumber: number,
   scale: number,
   signal?: AbortSignal,
+  rotation: PageRotation = 0,
 ): Promise<HTMLCanvasElement> {
   const page = await document.getPage(pageNumber);
-  const viewport = page.getViewport({ scale, rotation: 0 });
+  const viewport = page.getViewport({ scale, rotation });
   const canvas = window.document.createElement("canvas");
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
@@ -24,4 +26,3 @@ export async function renderPageToCanvas(
     signal?.removeEventListener("abort", handleAbort);
   }
 }
-

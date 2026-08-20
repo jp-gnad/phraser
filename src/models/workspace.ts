@@ -1,4 +1,5 @@
 import type { CompetitionMetadata, DisciplineDefinition, IndividualCompetitionResult } from "./competition";
+import type { PageRotation } from "./common";
 import type { GlobalFieldRule, MappingMode, MappingRule, ResultBlock } from "./mapping";
 
 export interface WorkspaceMetadata extends CompetitionMetadata {
@@ -19,4 +20,6 @@ export interface WorkspaceDomainState {
   metadata: WorkspaceMetadata;
   globalRules: GlobalFieldRule[];
   results: IndividualCompetitionResult[];
+  excludedPages: number[];
+  pageRotations: Record<number, PageRotation>;
 }

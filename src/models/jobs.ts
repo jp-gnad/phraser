@@ -1,4 +1,4 @@
-import type { EntityId } from "./common";
+import type { EntityId, PageRotation } from "./common";
 
 export type ProcessingJobKind =
   | "pdf-text-analysis"
@@ -34,10 +34,9 @@ export interface WorkspaceUiState {
   phase: WorkspacePhase;
   activePage: number;
   zoom: number;
-  rotation: 0 | 90 | 180 | 270;
+  rotation: PageRotation;
   selectedTokenIds: EntityId[];
   activeResultId?: EntityId;
   activeFieldPath?: string;
   showOnlyWarnings: boolean;
 }
-

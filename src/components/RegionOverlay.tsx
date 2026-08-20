@@ -1,11 +1,13 @@
 import { useState, type PointerEvent } from "react";
-import type { NormalizedRect, ResultBlock } from "../models";
+import type { NormalizedRect, PageRotation, ResultBlock } from "../models";
+import { inversePageRotation, rotateNormalizedRect } from "../utils/geometry";
 
 interface RegionOverlayProps {
   page: number;
   blocks: ResultBlock[];
   activeBlockId?: string;
   drawing: boolean;
+  rotation: PageRotation;
   onCreate: (bounds: NormalizedRect) => void;
 }
 
@@ -14,6 +16,7 @@ export function RegionOverlay({
   blocks,
   activeBlockId,
   drawing,
+  rotation,
   onCreate,
 }: RegionOverlayProps) {
   const [start, setStart] = useState<{ x: number; y: number }>();
@@ -49,7 +52,9 @@ export function RegionOverlay({
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     if (!drawing || !draft) return;
     event.currentTarget.releasePointerCapture(event.pointerId);
-    if (draft.width >= 0.03 && draft.height >= 0.03) onCreate(draft);
+    if (draft.width >= 0.03 && draft.height >= 0.03) {
+      onCreate(rotateNormalizedRect(draft, inversePageRotation(rotation)));
+    }
     setStart(undefined);
     setDraft(undefined);
   }
@@ -71,7 +76,7 @@ export function RegionOverlay({
             block.id === activeBlockId ? " is-active" : ""
           }`}
           key={`${block.id}-${index}`}
-          style={rectStyle(bounds)}
+          style={rectStyle(rotateNormalizedRect(bounds, rotation))}
         >
           <span>{block.name}</span>
         </div>
@@ -89,4 +94,3 @@ function rectStyle(bounds: NormalizedRect) {
     height: `${bounds.height * 100}%`,
   };
 }
-

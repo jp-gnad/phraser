@@ -1,4 +1,4 @@
-import type { ConfidenceLevel, EntityId, NormalizedRect } from "./common";
+import type { ConfidenceLevel, EntityId, NormalizedRect, PageRotation } from "./common";
 
 export type TextSourceKind = "pdf-text" | "ocr";
 
@@ -30,6 +30,7 @@ export interface OcrPageResult {
   aggregateConfidence?: number;
   language: string;
   renderScale: number;
+  pageRotation: PageRotation;
   recipe: PreprocessingRecipe;
   cacheKey: string;
   createdAt: string;
@@ -52,4 +53,3 @@ export interface TextLayerAssessment {
   coverageRatio: number;
   reasonCodes: string[];
 }
-

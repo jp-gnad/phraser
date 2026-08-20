@@ -1,4 +1,5 @@
 export type EntityId = string;
+export type PageRotation = 0 | 90 | 180 | 270;
 
 export interface NormalizedRect {
   x: number;
@@ -28,4 +29,3 @@ export interface ConfidenceThresholds {
   safe: number;
   review: number;
 }
-

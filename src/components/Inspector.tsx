@@ -1,12 +1,14 @@
 import type { PageRenderInfo } from "./PdfCanvas";
 import { formatFileSize } from "../utils/fileValidation";
-import type { ConfidenceThresholds, PreprocessingRecipe } from "../models";
+import type { ConfidenceThresholds, PageRotation, PreprocessingRecipe } from "../models";
 import type { OcrProgress } from "../ocr/ocrEngine";
 
 interface InspectorProps {
   file: File;
   page: number;
   pageCount: number;
+  activePageCount: number;
+  rotation: PageRotation;
   renderInfo?: PageRenderInfo;
   recipe: PreprocessingRecipe;
   onRecipeChange: (recipe: PreprocessingRecipe) => void;
@@ -30,6 +32,8 @@ export function Inspector({
   file,
   page,
   pageCount,
+  activePageCount,
+  rotation,
   renderInfo,
   recipe,
   onRecipeChange,
@@ -55,7 +59,7 @@ export function Inspector({
           </div>
           <div>
             <dt>Seiten</dt>
-            <dd>{pageCount}</dd>
+            <dd>{activePageCount} aktiv · {pageCount} gesamt</dd>
           </div>
           <div>
             <dt>Status</dt>
@@ -80,6 +84,12 @@ export function Inspector({
             </span>
           </div>
         </div>
+        <dl className="property-list compact-properties">
+          <div>
+            <dt>OCR-Ausrichtung</dt>
+            <dd>{rotation}°</dd>
+          </div>
+        </dl>
         <p className="inspector-note">
           Eine gute PDF-Textebene wird direkt verwendet. Für Scans kann die Seite lokal optimiert
           und mit deutschem Sprachmodell erkannt werden.
@@ -204,7 +214,7 @@ export function Inspector({
             {renderInfo?.tokens.some((token) => token.source === "ocr") ? "OCR erneut ausführen" : "OCR lokal durchführen"}
           </button>
         )}
-        <p className="inspector-note">OCR-Kern, Sprachmodell und Bilddaten bleiben auf diesem Gerät.</p>
+        <p className="inspector-note">Die Seitendrehung wird vor der Erkennung angewendet. OCR-Kern, Sprachmodell und Bilddaten bleiben auf diesem Gerät.</p>
       </section> : (
         <section className="inspector-section next-step-card">
           <span className="inspector-kicker">Arbeitsstand</span>

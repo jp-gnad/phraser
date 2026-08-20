@@ -9,6 +9,7 @@ import type {
   MappingTarget,
   MappingTemplate,
   NormalizedRect,
+  PageRotation,
   PreprocessingRecipe,
   ResultBlock,
   IndividualCompetitionResult,
@@ -54,6 +55,8 @@ const initialDomainState: WorkspaceDomainState = {
   metadata: {},
   globalRules: [],
   results: [],
+  excludedPages: [],
+  pageRotations: {},
 };
 
 export function PdfWorkspace({
@@ -65,7 +68,6 @@ export function PdfWorkspace({
 }: PdfWorkspaceProps) {
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
   const [pageInfo, setPageInfo] = useState<Record<number, PageRenderInfo>>({});
   const [renderError, setRenderError] = useState<string>();
   const [showTokens, setShowTokens] = useState(true);
@@ -97,6 +99,21 @@ export function PdfWorkspace({
     () => document.fingerprints[0] ?? `${file.name}-${file.size}-${file.lastModified}`,
     [document.fingerprints, file.lastModified, file.name, file.size],
   );
+  const allPages = useMemo(
+    () => Array.from({ length: document.numPages }, (_, index) => index + 1),
+    [document.numPages],
+  );
+  const includedPages = useMemo(
+    () => allPages.filter((pageNumber) => !domain.state.excludedPages.includes(pageNumber)),
+    [allPages, domain.state.excludedPages],
+  );
+  const navigablePages = activePhase === "file" ? allPages : includedPages;
+  const navigationIndex = navigablePages.indexOf(page);
+  const previousPage = navigationIndex > 0 ? navigablePages[navigationIndex - 1] : undefined;
+  const nextPage = navigationIndex >= 0 && navigationIndex < navigablePages.length - 1
+    ? navigablePages[navigationIndex + 1]
+    : undefined;
+  const rotation = domain.state.pageRotations[page] ?? 0;
 
   useEffect(() => {
     let active = true;
@@ -112,7 +129,13 @@ export function PdfWorkspace({
     void loadWorkspaceSession(sessionId).then((saved) => {
       if (!active) return;
       if (saved?.schemaVersion === 1) {
-        domain.reset({ ...saved, globalRules: saved.globalRules ?? [] });
+        domain.reset({
+          ...initialDomainState,
+          ...saved,
+          globalRules: saved.globalRules ?? [],
+          excludedPages: saved.excludedPages ?? [],
+          pageRotations: saved.pageRotations ?? {},
+        });
         setActiveBlockId(saved.resultBlocks[0]?.id);
         setWorkspaceMessage("Lokale Sitzung wiederhergestellt.");
       }
@@ -133,12 +156,16 @@ export function PdfWorkspace({
 
   useEffect(() => {
     if (activePhase === "mapping") {
-      setRotation(0);
       setShowTokens(true);
       setSourceInspection(undefined);
       setSelectedTokenIds([]);
     }
   }, [activePhase]);
+
+  useEffect(() => {
+    if (activePhase === "file" || !domain.state.excludedPages.includes(page)) return;
+    setPage(findNearestPage(page, includedPages));
+  }, [activePhase, domain.state.excludedPages, includedPages, page]);
 
   useEffect(() => {
     return () => {
@@ -162,6 +189,7 @@ export function PdfWorkspace({
   const handleRenderError = useCallback((message: string) => setRenderError(message), []);
 
   function changePage(nextPage: number) {
+    if (activePhase !== "file" && domain.state.excludedPages.includes(nextPage)) return;
     setPage(nextPage);
     setSelectedTokenIds([]);
     setDrawingBlock(false);
@@ -169,16 +197,94 @@ export function PdfWorkspace({
     setActiveBlockId(nextBlock?.id);
   }
 
+  function togglePageExclusion(targetPage: number) {
+    const currentlyExcluded = domain.state.excludedPages.includes(targetPage);
+    if (currentlyExcluded) {
+      domain.update((current) => ({
+        ...current,
+        excludedPages: current.excludedPages.filter((pageNumber) => pageNumber !== targetPage),
+      }));
+      setWorkspaceMessage(`Seite ${targetPage} ist wieder für OCR und Extraktion aktiv.`);
+      return;
+    }
+
+    if (includedPages.length <= 1) {
+      setWorkspaceMessage("Mindestens eine PDF-Seite muss aktiv bleiben.");
+      return;
+    }
+
+    if (ocrRunning && targetPage === page) cancelOcr();
+    const remainingPages = includedPages.filter((pageNumber) => pageNumber !== targetPage);
+    domain.update((current) => {
+      const resultBlocks = current.resultBlocks.flatMap((block) => {
+        if (!block.pages.includes(targetPage)) return [block];
+        const pages = block.pages.filter((pageNumber) => pageNumber !== targetPage);
+        if (pages.length === 0) return [];
+        const boundsByPage = { ...block.boundsByPage };
+        delete boundsByPage[targetPage];
+        return [{ ...block, pages, boundsByPage }];
+      });
+      const retainedBlockIds = new Set(resultBlocks.map((block) => block.id));
+      return {
+        ...current,
+        excludedPages: [...current.excludedPages, targetPage].sort((left, right) => left - right),
+        resultBlocks,
+        fieldRules: current.fieldRules.filter((rule) => rule.samplePage !== targetPage),
+        globalRules: removePageFromGlobalRules(current.globalRules, targetPage, retainedBlockIds),
+        results: [],
+      };
+    });
+    setSourceInspection(undefined);
+    setSelectedTokenIds([]);
+    setDrawingBlock(false);
+    if (targetPage === page) setPage(findNearestPage(targetPage, remainingPages));
+    setWorkspaceMessage(`Seite ${targetPage} ausgeschlossen. Sie wird nicht per OCR verarbeitet oder extrahiert.`);
+  }
+
+  function rotateCurrentPage() {
+    if (ocrRunning) cancelOcr();
+    const nextRotation = ((rotation + 90) % 360) as PageRotation;
+    domain.update((current) => ({
+      ...current,
+      pageRotations: { ...current.pageRotations, [page]: nextRotation },
+      results: [],
+    }));
+    setPageInfo((current) => {
+      const currentPageInfo = current[page];
+      if (!currentPageInfo) return current;
+      return {
+        ...current,
+        [page]: {
+          ...currentPageInfo,
+          tokens: currentPageInfo.tokens.filter((token) => token.source !== "ocr"),
+        },
+      };
+    });
+    setOptimizedPages((current) => {
+      if (!current[page]) return current;
+      const next = { ...current };
+      delete next[page];
+      return next;
+    });
+    setViewMode("original");
+    setOcrProgress(undefined);
+    setSelectedTokenIds([]);
+    setWorkspaceMessage(`Seite ${page} auf ${nextRotation}° gedreht. OCR berücksichtigt diese Ausrichtung beim nächsten Lauf.`);
+  }
+
   async function runOcr() {
+    if (domain.state.excludedPages.includes(page)) {
+      setWorkspaceMessage(`Seite ${page} ist ausgeschlossen. Nehmen Sie sie unter „Datei“ wieder auf.`);
+      return;
+    }
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setOcrRunning(true);
     setRenderError(undefined);
-    setRotation(0);
 
     try {
       setOcrProgress({ progress: 0.03, status: "PDF-Seite wird in OCR-Auflösung gerendert" });
-      const source = await renderPageToCanvas(document, page, 2.5, controller.signal);
+      const source = await renderPageToCanvas(document, page, 2.5, controller.signal, rotation);
       const optimized = await preprocessPage(
         source,
         recipe,
@@ -193,6 +299,7 @@ export function PdfWorkspace({
         page,
         sessionId,
         2.5,
+        rotation,
         recipe,
         confidenceThresholds,
         (progress) => setOcrProgress({ ...progress, progress: 0.18 + progress.progress * 0.82 }),
@@ -470,20 +577,27 @@ export function PdfWorkspace({
       </div>
 
       <div className="workspace-grid">
-        <PageRail currentPage={page} onPageChange={changePage} pageCount={document.numPages} />
+        <PageRail
+          canManagePages={activePhase === "file"}
+          currentPage={page}
+          excludedPages={domain.state.excludedPages}
+          onPageChange={changePage}
+          onPageExclusionToggle={togglePageExclusion}
+          pageCount={document.numPages}
+        />
         <main className="viewer-panel">
           <ViewerToolbar
+            nextPage={nextPage}
             onPageChange={changePage}
-            onRotate={() => {
-              setViewMode("original");
-              setRotation((current) => (current + 90) % 360);
-            }}
+            onRotate={rotateCurrentPage}
             onShowTokensChange={setShowTokens}
             onViewModeChange={setViewMode}
             onZoomChange={setZoom}
             optimizedAvailable={Boolean(optimizedPage)}
             page={page}
             pageCount={document.numPages}
+            previousPage={previousPage}
+            rotation={rotation}
             showTokens={showTokens}
             viewMode={viewMode}
             zoom={zoom}
@@ -507,7 +621,7 @@ export function PdfWorkspace({
                 />
               ) : null}
               {activePhase === "mapping" ? (
-                <RegionOverlay activeBlockId={activeBlockId} blocks={domain.state.resultBlocks} drawing={drawingBlock} onCreate={addBlock} page={page} />
+                <RegionOverlay activeBlockId={activeBlockId} blocks={domain.state.resultBlocks} drawing={drawingBlock} onCreate={addBlock} page={page} rotation={rotation} />
               ) : null}
             </div>
           </div>
@@ -558,6 +672,7 @@ export function PdfWorkspace({
         ) : (
           <Inspector
             file={file}
+            activePageCount={includedPages.length}
             confidenceThresholds={confidenceThresholds}
             onConfidenceThresholdsChange={setConfidenceThresholds}
             onCancelOcr={cancelOcr}
@@ -569,6 +684,7 @@ export function PdfWorkspace({
             pageCount={document.numPages}
             recipe={recipe}
             renderInfo={currentInfo}
+            rotation={rotation}
             showOcr={activePhase === "ocr"}
           />
         )}
@@ -624,4 +740,28 @@ function formatHintForTarget(target: MappingTarget): MappingRule["formatHint"] {
 
 function rectsIntersect(left: NormalizedRect, right: NormalizedRect): boolean {
   return left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
+}
+
+function findNearestPage(referencePage: number, pages: number[]): number {
+  return pages.reduce((nearest, candidate) =>
+    Math.abs(candidate - referencePage) < Math.abs(nearest - referencePage) ? candidate : nearest,
+  pages[0] ?? 1);
+}
+
+function removePageFromGlobalRules(
+  rules: GlobalFieldRule[],
+  excludedPage: number,
+  retainedBlockIds: Set<string>,
+): GlobalFieldRule[] {
+  const retained: GlobalFieldRule[] = [];
+  for (const rule of rules) {
+    if (rule.scope.kind === "block" && !retainedBlockIds.has(rule.scope.blockId)) continue;
+    if (rule.scope.kind !== "pages") {
+      retained.push(rule);
+      continue;
+    }
+    const pages = rule.scope.pages.filter((pageNumber) => pageNumber !== excludedPage);
+    if (pages.length > 0) retained.push({ ...rule, scope: { kind: "pages", pages } });
+  }
+  return retained;
 }

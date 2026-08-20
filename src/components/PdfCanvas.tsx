@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
-import type { TextLayerAssessment } from "../models";
+import type { PageRotation, TextLayerAssessment } from "../models";
 import {
   assessTextLayer,
   textItemsToTokens,
@@ -18,7 +18,7 @@ interface PdfCanvasProps {
   document: PDFDocumentProxy;
   page: number;
   zoom: number;
-  rotation: number;
+  rotation: PageRotation;
   onRenderInfo: (info: PageRenderInfo) => void;
   onError: (message: string) => void;
 }
